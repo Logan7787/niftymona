@@ -136,6 +136,7 @@ export const TechnicalCharts: React.FC<TechnicalChartsProps> = ({ indicators, un
           const high = Number((Math.max(open, close) + Math.abs(noise * 0.5) + 3).toFixed(2));
           const low = Number((Math.min(open, close) - Math.abs(noise * 0.5) - 3).toFixed(2));
           generated.push({
+            timestamp: new Date(t * 1000).toISOString(),
             time: t,
             open,
             high,

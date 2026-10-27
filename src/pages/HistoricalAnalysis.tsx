@@ -4,7 +4,7 @@
 // ==============================================================================
 
 import React from 'react';
-import { UnderlyingSnapshot, TechnicalIndicatorData } from '../types/market';
+import { UnderlyingSnapshot, TechnicalIndicatorData, Candle } from '../types/market';
 import { History, Calendar, BarChart3, TrendingUp, TrendingDown, Layers } from 'lucide-react';
 
 interface HistoricalAnalysisProps {
@@ -81,7 +81,7 @@ export const HistoricalAnalysis: React.FC<HistoricalAnalysisProps> = ({ underlyi
               </tr>
             </thead>
             <tbody className="divide-y divide-terminal-800/40">
-              {indicators?.candles?.slice(-12).reverse().map((candle: any, idx: number) => {
+              {indicators?.candles?.slice(-12).reverse().map((candle: Candle, idx: number) => {
                 const isGreen = candle.close >= candle.open;
                 return (
                   <tr key={idx} className="hover:bg-terminal-800/40">
