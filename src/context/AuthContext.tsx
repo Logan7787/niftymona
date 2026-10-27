@@ -58,7 +58,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('nifty_user', JSON.stringify(res.user));
         return { success: true };
       } else {
-        return { success: false, error: res.error || 'Authentication failed' };
+        return { success: false, error: (res as any).error || (res as any).message || 'Authentication failed' };
       }
     } catch (err: any) {
       return { success: false, error: err.message || 'Server connection error' };

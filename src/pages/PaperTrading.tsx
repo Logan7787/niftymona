@@ -90,7 +90,7 @@ export const PaperTrading: React.FC<PaperTradingProps> = ({
         fetchAccount();
         if (onClearTradeTarget) onClearTradeTarget();
       } else {
-        setErrorMsg(res.error || 'Failed to place paper order');
+        setErrorMsg((res as any).error || res.message || 'Failed to place paper order');
       }
     } catch (err: any) {
       setLoading(false);
@@ -105,7 +105,7 @@ export const PaperTrading: React.FC<PaperTradingProps> = ({
         setSuccessMsg(res.message);
         fetchAccount();
       } else {
-        setErrorMsg(res.error || 'Failed to close position');
+        setErrorMsg((res as any).error || res.message || 'Failed to close position');
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Server error closing position');

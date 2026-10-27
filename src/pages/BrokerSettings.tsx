@@ -66,7 +66,7 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
         onSelectBroker('angelone');
         fetchStatus();
       } else {
-        setMsg({ type: 'error', text: res.error || res.message || 'Failed to connect with Angel One credentials' });
+        setMsg({ type: 'error', text: (res as any).error || res.message || 'Failed to connect with Angel One credentials' });
       }
     } catch (err: any) {
       setLoading(false);
@@ -80,19 +80,18 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
     setMsg(null);
     try {
       const res = await api.saveUpstoxCredentials({
-        apiKey: upstoxApiKey,
-        apiSecret: upstoxApiSecret,
-        accessToken: upstoxAccessToken,
+        apiKey: upstoxApiKey.trim() || 'upstox_client',
+        apiSecret: upstoxApiSecret.trim(),
+        accessToken: upstoxAccessToken.trim(),
       });
       setLoading(false);
       if (res.success) {
         setMsg({ type: 'success', text: res.message });
-        setUpstoxApiSecret('');
         setUpstoxAccessToken('');
         onSelectBroker('upstox');
         fetchStatus();
       } else {
-        setMsg({ type: 'error', text: res.error || res.message || 'Failed to connect with Upstox credentials' });
+        setMsg({ type: 'error', text: res.message || 'Failed to connect with Upstox credentials' });
       }
     } catch (err: any) {
       setLoading(false);
@@ -307,14 +306,13 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
             {/* Credentials Input Form */}
             <form onSubmit={handleSaveUpstox} className="mt-4 space-y-3 text-xs">
               <div>
-                <label className="text-[10px] text-slate-400 block mb-1">UPSTOX API KEY / CLIENT ID</label>
+                <label className="text-[10px] text-slate-400 block mb-1">UPSTOX API KEY / CLIENT ID (OPTIONAL)</label>
                 <input
                   type="text"
                   value={upstoxApiKey}
                   onChange={(e) => setUpstoxApiKey(e.target.value)}
-                  placeholder="e.g. 5d8e7...-4b2a..."
+                  placeholder="e.g. 5d8e7...-4b2a... (optional)"
                   className="w-full rounded-lg border border-terminal-700 bg-terminal-850 px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
-                  required
                 />
               </div>
 
