@@ -315,17 +315,17 @@ export const StrikeMonitor: React.FC<StrikeMonitorProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* 2. EXACT MOBILE QUOTE CARD (MATCHING THE ATTACHED SCREENSHOT)            */}
+      {/* 2. EXACT MOBILE QUOTE CARD (ADAPTS BEAUTIFULLY IN DAY & DARK THEME)        */}
       {/* ========================================================================= */}
-      <div className="rounded-2xl border border-slate-700/60 bg-gradient-to-b from-[#1b2230] to-[#121722] p-6 shadow-2xl space-y-5">
+      <div className="rounded-2xl border border-terminal-800 bg-terminal-900 dark:bg-gradient-to-b dark:from-[#1b2230] dark:to-[#121722] p-4 sm:p-6 shadow-xl space-y-4 sm:space-y-5 transition-colors">
         {/* Header Bar matching image */}
         <div className="flex items-start justify-between">
           {/* Left Title & Instrument Description */}
           <div>
-            <h1 className="text-2xl font-extrabold text-white tracking-wide">
+            <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white tracking-wide">
               NIFTY
             </h1>
-            <p className="text-xs text-slate-400 mt-0.5 tracking-wide">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 tracking-wide">
               {formattedExpiry} {selectedStrike} {optionType} • NSE FO
             </p>
           </div>
@@ -333,52 +333,52 @@ export const StrikeMonitor: React.FC<StrikeMonitorProps> = ({
           {/* Right Price & Net Change with Live Market Color */}
           <div className="text-right">
             <div className="flex items-center justify-end gap-1">
-              <span className={`text-2xl font-bold tracking-tight ${isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
+              <span className={`text-xl sm:text-2xl font-bold tracking-tight ${isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                 ₹{ltp.toFixed(2)}
               </span>
               {isPositive ? (
-                <span className="text-emerald-400 text-lg">▲</span>
+                <span className="text-emerald-600 dark:text-emerald-400 text-lg">▲</span>
               ) : (
-                <span className="text-rose-400 text-lg">▼</span>
+                <span className="text-rose-600 dark:text-rose-400 text-lg">▼</span>
               )}
             </div>
-            <p className={`text-xs font-semibold mt-0.5 ${isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
+            <p className={`text-xs font-semibold mt-0.5 ${isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
               {isPositive ? '+' : ''}{change.toFixed(2)} ({isPositive ? '+' : ''}{changePercent.toFixed(2)}%)
             </p>
           </div>
         </div>
 
-        {/* OHLC STATS BOX (MATCHING EXACT TABLE FROM ATTACHED SCREENSHOT) */}
-        <div className="rounded-xl border border-slate-700/50 bg-[#161c28]/90 p-4">
-          <div className="grid grid-cols-4 divide-x divide-slate-700/60 text-center">
+        {/* OHLC STATS BOX */}
+        <div className="rounded-xl border border-terminal-800 bg-terminal-850 dark:bg-[#161c28]/90 p-3 sm:p-4">
+          <div className="grid grid-cols-4 divide-x divide-terminal-700/60 text-center">
             {/* Open */}
-            <div className="px-2">
-              <span className="text-xs text-slate-400 block mb-1">Open</span>
-              <span className="text-base font-bold text-white block">
+            <div className="px-1 sm:px-2">
+              <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 block mb-1">Open</span>
+              <span className="text-sm sm:text-base font-bold text-slate-900 dark:text-white block">
                 {contract?.open != null ? contract.open.toFixed(2) : (ltp * 1.05).toFixed(2)}
               </span>
             </div>
 
             {/* High */}
-            <div className="px-2">
-              <span className="text-xs text-slate-400 block mb-1">High</span>
-              <span className="text-base font-bold text-emerald-400 block">
+            <div className="px-1 sm:px-2">
+              <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 block mb-1">High</span>
+              <span className="text-sm sm:text-base font-bold text-emerald-600 dark:text-emerald-400 block">
                 {contract?.high != null ? contract.high.toFixed(2) : (ltp * 1.25).toFixed(2)}
               </span>
             </div>
 
             {/* Low */}
-            <div className="px-2">
-              <span className="text-xs text-slate-400 block mb-1">Low</span>
-              <span className="text-base font-bold text-rose-400 block">
+            <div className="px-1 sm:px-2">
+              <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 block mb-1">Low</span>
+              <span className="text-sm sm:text-base font-bold text-rose-600 dark:text-rose-400 block">
                 {contract?.low != null ? contract.low.toFixed(2) : (ltp * 0.85).toFixed(2)}
               </span>
             </div>
 
             {/* Prev. Close */}
-            <div className="px-2">
-              <span className="text-xs text-slate-400 block mb-1">Prev. Close</span>
-              <span className="text-base font-bold text-slate-200 block">
+            <div className="px-1 sm:px-2">
+              <span className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 block mb-1">Prev. Close</span>
+              <span className="text-sm sm:text-base font-bold text-slate-700 dark:text-slate-200 block">
                 {contract?.prevClose != null ? contract.prevClose.toFixed(2) : (ltp * 1.15).toFixed(2)}
               </span>
             </div>
@@ -386,42 +386,42 @@ export const StrikeMonitor: React.FC<StrikeMonitorProps> = ({
         </div>
 
         {/* Additional Market Cards (Volume, OI, Greeks & Depth) */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 pt-1">
           {/* Volume */}
-          <div className="rounded-xl border border-terminal-800 bg-terminal-900/60 p-3">
-            <span className="text-[10px] text-slate-400 uppercase block">VOLUME</span>
-            <span className="text-sm font-bold text-white mt-0.5 block">
+          <div className="rounded-xl border border-terminal-800 bg-terminal-850/80 p-2.5 sm:p-3">
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase block">VOLUME</span>
+            <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white mt-0.5 block">
               {contract?.volume ? contract.volume.toLocaleString('en-IN') : '1,42,850'}
             </span>
             <span className="text-[10px] text-slate-400 block mt-0.5">Contracts</span>
           </div>
 
           {/* Open Interest */}
-          <div className="rounded-xl border border-terminal-800 bg-terminal-900/60 p-3">
-            <span className="text-[10px] text-slate-400 uppercase block">OPEN INTEREST</span>
-            <span className="text-sm font-bold text-white mt-0.5 block">
+          <div className="rounded-xl border border-terminal-800 bg-terminal-850/80 p-2.5 sm:p-3">
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase block">OPEN INTEREST</span>
+            <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white mt-0.5 block">
               {contract?.oi ? contract.oi.toLocaleString('en-IN') : '2,10,000'}
             </span>
-            <span className={`text-[10px] block mt-0.5 ${(contract?.oiChange || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            <span className={`text-[10px] block mt-0.5 ${(contract?.oiChange || 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
               Chg: {(contract?.oiChange || 0) >= 0 ? '+' : ''}{(contract?.oiChange || -4500).toLocaleString('en-IN')}
             </span>
           </div>
 
           {/* Bid / Ask */}
-          <div className="rounded-xl border border-terminal-800 bg-terminal-900/60 p-3">
-            <span className="text-[10px] text-slate-400 uppercase block">BEST BID / ASK</span>
+          <div className="rounded-xl border border-terminal-800 bg-terminal-850/80 p-2.5 sm:p-3">
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase block">BEST BID / ASK</span>
             <div className="text-xs font-bold mt-0.5 space-x-1">
-              <span className="text-emerald-400">₹{(contract?.bid ?? (ltp - 0.25)).toFixed(2)}</span>
-              <span className="text-slate-500">/</span>
-              <span className="text-rose-400">₹{(contract?.ask ?? (ltp + 0.25)).toFixed(2)}</span>
+              <span className="text-emerald-600 dark:text-emerald-400">₹{(contract?.bid ?? (ltp - 0.25)).toFixed(2)}</span>
+              <span className="text-slate-400">/</span>
+              <span className="text-rose-600 dark:text-rose-400">₹{(contract?.ask ?? (ltp + 0.25)).toFixed(2)}</span>
             </div>
             <span className="text-[10px] text-slate-400 block mt-0.5">Lot: 65 nos</span>
           </div>
 
           {/* Implied Volatility & Delta */}
-          <div className="rounded-xl border border-terminal-800 bg-terminal-900/60 p-3">
-            <span className="text-[10px] text-slate-400 uppercase block">IV / DELTA</span>
-            <span className="text-sm font-bold text-blue-400 mt-0.5 block">
+          <div className="rounded-xl border border-terminal-800 bg-terminal-850/80 p-2.5 sm:p-3">
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase block">IV / DELTA</span>
+            <span className="text-xs sm:text-sm font-bold text-blue-600 dark:text-blue-400 mt-0.5 block">
               {contract?.iv || 13.5}% / {contract?.delta || 0.50}
             </span>
             <span className="text-[10px] text-slate-400 block mt-0.5">
@@ -431,7 +431,7 @@ export const StrikeMonitor: React.FC<StrikeMonitorProps> = ({
         </div>
 
         {/* Quick Execution Buttons */}
-        <div className="flex flex-wrap items-center justify-end gap-3 pt-2 border-t border-slate-700/40">
+        <div className="flex flex-wrap items-center justify-end gap-3 pt-2 border-t border-terminal-800">
           {onNavigateToPage && (
             <button
               onClick={() => onNavigateToPage('option-chain')}
