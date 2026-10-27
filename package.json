@@ -1,0 +1,28 @@
+{
+  "name": "nifty-atm-analyzer-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NIFTY 50 ATM Strike Analysis & Live Market Monitoring Web Application",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:web": "npm run dev --workspace=@nifty-atm/web",
+    "dev:server": "npm run dev --workspace=@nifty-atm/server",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "keywords": [
+    "nifty50",
+    "options-trading",
+    "atm-strike",
+    "angel-one",
+    "upstox",
+    "tradingview",
+    "market-monitoring"
+  ],
+  "author": "Antigravity Quantitative Engineering",
+  "license": "MIT"
+}
