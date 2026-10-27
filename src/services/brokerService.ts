@@ -150,7 +150,7 @@ class BrokerService {
             name: 'NIFTY',
             expiry: '',
             strike: 0,
-            lotSize: 25,
+            lotSize: 65,
             instrumentType: 'INDEX',
             exchange: 'NSE',
             tickSize: 0.05,
@@ -164,7 +164,7 @@ class BrokerService {
             name: 'NIFTY',
             expiry: c.expiry,
             strike: Number(c.strike_price),
-            lotSize: c.lot_size || 25,
+            lotSize: c.lot_size || 65,
             instrumentType: c.instrument_type as any,
             exchange: 'NFO',
             tickSize: 0.05,
@@ -349,7 +349,7 @@ class BrokerService {
         name: 'NIFTY',
         expiry: '',
         strike: 0,
-        lotSize: 25,
+        lotSize: 65,
         instrumentType: 'INDEX',
         exchange: 'NSE',
         tickSize: 0.05,
@@ -358,8 +358,8 @@ class BrokerService {
 
     for (let strike = 22400; strike <= 23100; strike += 50) {
       instruments.push(
-        { token: `MOCK_${strike}_CE`, symbol: `NIFTY ${strike} CE`, name: 'NIFTY', expiry: mockExpiry, strike, lotSize: 25, instrumentType: 'CE', exchange: 'NFO', tickSize: 0.05 },
-        { token: `MOCK_${strike}_PE`, symbol: `NIFTY ${strike} PE`, name: 'NIFTY', expiry: mockExpiry, strike, lotSize: 25, instrumentType: 'PE', exchange: 'NFO', tickSize: 0.05 }
+        { token: `MOCK_${strike}_CE`, symbol: `NIFTY ${strike} CE`, name: 'NIFTY', expiry: mockExpiry, strike, lotSize: 65, instrumentType: 'CE', exchange: 'NFO', tickSize: 0.05 },
+        { token: `MOCK_${strike}_PE`, symbol: `NIFTY ${strike} PE`, name: 'NIFTY', expiry: mockExpiry, strike, lotSize: 65, instrumentType: 'PE', exchange: 'NFO', tickSize: 0.05 }
       );
     }
 

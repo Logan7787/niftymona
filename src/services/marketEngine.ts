@@ -180,7 +180,7 @@ export class InstrumentService {
         }
       }
     }
-    return 25;
+    return 65; // 1 lot = 65 nos (NSE standard)
   }
 }
 
@@ -502,7 +502,7 @@ export class PaperTradingService {
   }
 
   public placeOrder(order: any): { success: boolean; message: string; position?: PaperTradeOrder } {
-    const lotSize = order.lotSize || 25;
+    const lotSize = order.lotSize || 65; // 1 lot = 65 nos (NSE standard)
     const numLots = order.numLots || 1;
     const totalQuantity = order.totalQuantity || lotSize * numLots;
     const cost = order.entryPrice * totalQuantity;
@@ -580,9 +580,21 @@ export class PaperTradingService {
     if (changed) this.saveState();
   }
 
-  public resetAccount(capital: number = 500000): void {
-    this.startingCapital = capital;
-    this.currentCash = capital;
+  public updateCapital(newCapital: number): { success: boolean; message: string } {
+    if (!newCapital || isNaN(newCapital) || newCapital <= 0) {
+      return { success: false, message: 'Capital amount must be greater than 0' };
+    }
+    const delta = newCapital - this.startingCapital;
+    this.startingCapital = newCapital;
+    this.currentCash = Math.max(0, this.currentCash + delta);
+    this.saveState();
+    return { success: true, message: `Capital updated to ₹${newCapital.toLocaleString('en-IN')}` };
+  }
+
+  public resetAccount(capital?: number): void {
+    const targetCapital = (capital && capital > 0) ? capital : this.startingCapital;
+    this.startingCapital = targetCapital;
+    this.currentCash = targetCapital;
     this.openPositions = [];
     this.tradeHistory = [];
     this.saveState();

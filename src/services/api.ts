@@ -173,6 +173,10 @@ export const api = {
     return brokerService.paperTradingService.closePosition(positionId, currentMarketPrice);
   },
 
+  async updatePaperCapital(capital: number) {
+    return brokerService.paperTradingService.updateCapital(capital);
+  },
+
   async resetPaperAccount(capital: number = 100000) {
     brokerService.paperTradingService.resetAccount(capital);
     return { success: true, message: `Paper trading account reset to initial capital (₹${capital.toLocaleString()}).` };

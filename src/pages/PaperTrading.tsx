@@ -8,7 +8,7 @@ import { PaperAccountSummary, PaperTradeOrder } from '../types/market';
 import { api } from '../services/api';
 import { 
   Briefcase, TrendingUp, TrendingDown, DollarSign, RotateCcw, 
-  ShieldAlert, CheckCircle2, Clock, X, Zap 
+  ShieldAlert, CheckCircle2, Clock, X, Zap, Edit3, Coins, Check 
 } from 'lucide-react';
 
 interface PaperTradingProps {
@@ -25,12 +25,17 @@ export const PaperTrading: React.FC<PaperTradingProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Order form state
+  // Capital manual update modal state
+  const [showCapitalModal, setShowCapitalModal] = useState(false);
+  const [manualCapitalInput, setManualCapitalInput] = useState('100000');
+  const [capitalUpdateMode, setCapitalUpdateMode] = useState<'adjust' | 'reset'>('adjust');
+
+  // Order form state (1 lot = 65 nos standard NSE NIFTY contract)
   const [symbol, setSymbol] = useState('NIFTY 24450 CE');
   const [strike, setStrike] = useState(24450);
   const [optionType, setOptionType] = useState<'CE' | 'PE'>('CE');
   const [action, setAction] = useState<'BUY' | 'SELL'>('BUY');
-  const [lotSize, setLotSize] = useState(25); // Standard NIFTY contract lot
+  const [lotSize, setLotSize] = useState(65); // 1 lot = 65 nos
   const [numLots, setNumLots] = useState(1);
   const [entryPrice, setEntryPrice] = useState(110);
   const [stopLoss, setStopLoss] = useState(85);
@@ -112,9 +117,37 @@ export const PaperTrading: React.FC<PaperTradingProps> = ({
     }
   };
 
+  const handleUpdateCapital = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = parseFloat(manualCapitalInput);
+    if (!amount || isNaN(amount) || amount <= 0) {
+      setErrorMsg('Please enter a valid capital amount greater than 0');
+      return;
+    }
+
+    try {
+      if (capitalUpdateMode === 'reset') {
+        await api.resetPaperAccount(amount);
+        setSuccessMsg(`Virtual portfolio reset to ₹${amount.toLocaleString('en-IN')}`);
+      } else {
+        const res = await api.updatePaperCapital(amount);
+        if (res.success) {
+          setSuccessMsg(res.message);
+        } else {
+          setErrorMsg(res.message);
+        }
+      }
+      setShowCapitalModal(false);
+      fetchAccount();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to update capital');
+    }
+  };
+
   const handleReset = async () => {
-    if (!window.confirm('Reset virtual paper trading capital to ₹100,000? All trade history will be cleared.')) return;
-    await api.resetPaperAccount(100000);
+    const currentCap = account?.startingCapital || 100000;
+    if (!window.confirm(`Reset virtual paper trading capital to ₹${currentCap.toLocaleString('en-IN')}? All trade history will be cleared.`)) return;
+    await api.resetPaperAccount(currentCap);
     fetchAccount();
   };
 
@@ -124,27 +157,52 @@ export const PaperTrading: React.FC<PaperTradingProps> = ({
   return (
     <div className="p-4 space-y-4 font-mono">
       {/* Disclaimer Banner */}
-      <div className="flex items-center justify-between p-3 rounded-xl border border-blue-500/30 bg-blue-950/20 text-xs text-blue-200">
+      <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl border border-blue-500/30 bg-blue-950/20 text-xs text-blue-200">
         <div className="flex items-center gap-2">
           <ShieldAlert className="h-4 w-4 text-blue-400 shrink-0" />
           <span>
-            <strong>PAPER TRADING ENGINE ACTIVE:</strong> Orders are simulated in an isolated virtual execution sandbox. No live broker orders are transmitted to exchange.
+            <strong>PAPER TRADING ENGINE ACTIVE:</strong> 1 Lot = 65 Nos. Orders are simulated in an isolated virtual execution sandbox.
           </span>
         </div>
-        <button
-          onClick={handleReset}
-          className="flex items-center gap-1 px-2.5 py-1 rounded bg-terminal-850 hover:bg-terminal-800 border border-terminal-700 text-[11px] text-slate-300 transition-colors cursor-pointer"
-        >
-          <RotateCcw className="h-3 w-3" />
-          <span>Reset Portfolio</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setManualCapitalInput(String(account?.startingCapital || 100000));
+              setShowCapitalModal(true);
+            }}
+            className="flex items-center gap-1 px-2.5 py-1 rounded bg-blue-600/30 hover:bg-blue-600/40 border border-blue-500/50 text-[11px] text-blue-200 transition-colors cursor-pointer"
+          >
+            <Coins className="h-3 w-3 text-emerald-400" />
+            <span>Update Capital</span>
+          </button>
+          <button
+            onClick={handleReset}
+            className="flex items-center gap-1 px-2.5 py-1 rounded bg-terminal-850 hover:bg-terminal-800 border border-terminal-700 text-[11px] text-slate-300 transition-colors cursor-pointer"
+          >
+            <RotateCcw className="h-3 w-3" />
+            <span>Reset Portfolio</span>
+          </button>
+        </div>
       </div>
 
       {/* Account Overview Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {/* Virtual Capital */}
-        <div className="rounded-xl border border-terminal-800 bg-terminal-900 p-3.5">
-          <span className="text-[10px] text-slate-400 block uppercase">STARTING CAPITAL</span>
+        <div className="rounded-xl border border-terminal-800 bg-terminal-900 p-3.5 relative">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-slate-400 block uppercase">STARTING CAPITAL</span>
+            <button
+              onClick={() => {
+                setManualCapitalInput(String(account?.startingCapital || 100000));
+                setShowCapitalModal(true);
+              }}
+              title="Edit Capital Amount"
+              className="px-1.5 py-0.5 rounded bg-blue-900/40 hover:bg-blue-800/60 text-[10px] text-blue-300 border border-blue-700/50 flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <Edit3 className="h-2.5 w-2.5" />
+              <span>Edit</span>
+            </button>
+          </div>
           <span className="text-base font-bold text-white mt-1 block">
             ₹{account?.startingCapital.toLocaleString('en-IN') || '1,00,000'}
           </span>
@@ -290,6 +348,7 @@ export const PaperTrading: React.FC<PaperTradingProps> = ({
                 <input
                   type="number"
                   min="1"
+                  max="500"
                   value={numLots}
                   onChange={(e) => setNumLots(Math.max(1, parseInt(e.target.value) || 1))}
                   className="w-full rounded-lg border border-terminal-700 bg-terminal-850 px-3 py-2 text-white"
@@ -297,20 +356,22 @@ export const PaperTrading: React.FC<PaperTradingProps> = ({
                 />
               </div>
               <div>
-                <label className="text-[10px] text-slate-400 block mb-1">LOT SIZE (METADATA)</label>
+                <label className="text-[10px] text-slate-400 block mb-1">LOT SIZE (1 LOT = 65 NOS)</label>
                 <input
                   type="number"
+                  min="1"
                   value={lotSize}
-                  readOnly
-                  className="w-full rounded-lg border border-terminal-700 bg-terminal-850/60 px-3 py-2 text-slate-400"
+                  onChange={(e) => setLotSize(Math.max(1, parseInt(e.target.value) || 65))}
+                  className="w-full rounded-lg border border-terminal-700 bg-terminal-850 px-3 py-2 text-white font-bold"
+                  title="NSE NIFTY Lot Size (Default: 65 nos)"
                 />
               </div>
             </div>
 
             {/* Total Qty & Required Capital Info */}
-            <div className="p-2.5 rounded-lg bg-terminal-850 border border-terminal-700/80 text-[11px] text-slate-300 flex justify-between">
-              <span>Total Qty: <strong>{totalQuantity}</strong></span>
-              <span>Req Margin: <strong>₹{estimatedCapital.toLocaleString('en-IN')}</strong></span>
+            <div className="p-2.5 rounded-lg bg-terminal-850 border border-terminal-700/80 text-[11px] text-slate-300 flex justify-between items-center">
+              <span>Total Qty: <strong className="text-white">{totalQuantity} nos</strong> ({numLots} {numLots === 1 ? 'lot' : 'lots'} × {lotSize})</span>
+              <span>Req Margin: <strong className="text-emerald-400">₹{estimatedCapital.toLocaleString('en-IN')}</strong></span>
             </div>
 
             {/* Entry Premium, Stop Loss & Target */}
@@ -450,6 +511,107 @@ export const PaperTrading: React.FC<PaperTradingProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Manual Capital Entry & Update Modal */}
+      {showCapitalModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl border border-terminal-700 bg-terminal-900 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-terminal-800">
+              <div className="flex items-center gap-2 text-white font-bold text-sm">
+                <Coins className="h-5 w-5 text-emerald-400" />
+                <span>Manual Capital Entry & Update</span>
+              </div>
+              <button 
+                onClick={() => setShowCapitalModal(false)}
+                className="text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateCapital} className="space-y-4 text-xs">
+              <div>
+                <label className="text-slate-300 block mb-1 font-semibold">ENTER CAPITAL AMOUNT (₹)</label>
+                <input
+                  type="number"
+                  min="1000"
+                  step="1000"
+                  value={manualCapitalInput}
+                  onChange={(e) => setManualCapitalInput(e.target.value)}
+                  placeholder="e.g. 50000, 100000, 200000, 500000"
+                  className="w-full rounded-lg border border-terminal-700 bg-terminal-850 px-3.5 py-2.5 text-base text-white font-bold"
+                  required
+                />
+                <span className="text-[10px] text-slate-400 block mt-1">
+                  Type any custom capital amount you want to simulate
+                </span>
+              </div>
+
+              {/* Quick Preset Buttons */}
+              <div>
+                <span className="text-[10px] text-slate-400 block mb-1.5 uppercase font-semibold">Quick Presets</span>
+                <div className="grid grid-cols-4 gap-2">
+                  {[50000, 100000, 200000, 500000].map((preset) => (
+                    <button
+                      type="button"
+                      key={preset}
+                      onClick={() => setManualCapitalInput(String(preset))}
+                      className={`px-2 py-1.5 rounded border text-[11px] font-semibold transition-all cursor-pointer ${
+                        manualCapitalInput === String(preset)
+                          ? 'bg-blue-600 border-blue-500 text-white'
+                          : 'bg-terminal-850 border-terminal-700 text-slate-300 hover:bg-terminal-800'
+                      }`}
+                    >
+                      ₹{(preset / 1000)}k
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Mode Selection */}
+              <div className="space-y-2 pt-2 border-t border-terminal-800/80">
+                <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+                  <input
+                    type="radio"
+                    name="capitalMode"
+                    checked={capitalUpdateMode === 'adjust'}
+                    onChange={() => setCapitalUpdateMode('adjust')}
+                    className="text-blue-500"
+                  />
+                  <span>Adjust Capital Balance (Keep current open positions)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+                  <input
+                    type="radio"
+                    name="capitalMode"
+                    checked={capitalUpdateMode === 'reset'}
+                    onChange={() => setCapitalUpdateMode('reset')}
+                    className="text-blue-500"
+                  />
+                  <span className="text-rose-300">Reset Entire Account to this Capital (Clear history)</span>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-terminal-800">
+                <button
+                  type="button"
+                  onClick={() => setShowCapitalModal(false)}
+                  className="px-4 py-2 rounded-lg bg-terminal-800 hover:bg-terminal-750 text-slate-300 text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-900/30"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  <span>Save & Update Capital</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
