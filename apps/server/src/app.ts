@@ -8,7 +8,7 @@ import { z } from 'zod';
 import jwt from 'jsonwebtoken';
 import { MarketDataService } from './services/MarketDataService.js';
 import { PaperTradingService } from './paper-trading/PaperTradingService.js';
-import { encryptCredentials, maskString, redactSecrets } from './security/vault.js';
+import { encryptCredentials, decryptCredentials, maskString, redactSecrets } from './security/vault.js';
 import { BrokerCredentialMasked, BrokerProvider } from './types/market.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'nifty-atm-jwt-secret-vault-2026';
@@ -168,12 +168,49 @@ export function createApp(
     }
 
     const { provider } = parsed.data;
-    const success = await marketDataService.setProvider(provider);
+    const userId = (req as any).user.id;
+    let creds: any = undefined;
+
+    if (provider === 'upstox') {
+      const vaultEntry = credentialsVault.get(userId)?.get('upstox');
+      if (vaultEntry) {
+        try {
+          creds = decryptCredentials(vaultEntry.encrypted);
+        } catch {
+          // malformed vault
+        }
+      } else if (process.env.UPSTOX_ACCESS_TOKEN) {
+        creds = {
+          apiKey: process.env.UPSTOX_CLIENT_ID || 'client_id',
+          accessToken: process.env.UPSTOX_ACCESS_TOKEN,
+        };
+      }
+    } else if (provider === 'angelone') {
+      const vaultEntry = credentialsVault.get(userId)?.get('angelone');
+      if (vaultEntry) {
+        try {
+          creds = decryptCredentials(vaultEntry.encrypted);
+        } catch {
+          // malformed vault
+        }
+      } else if (process.env.ANGELONE_API_KEY) {
+        creds = {
+          apiKey: process.env.ANGELONE_API_KEY,
+          clientCode: process.env.ANGELONE_CLIENT_CODE,
+          password: process.env.ANGELONE_PASSWORD,
+          totp: process.env.ANGELONE_TOTP_KEY,
+        };
+      }
+    }
+
+    const success = await marketDataService.setProvider(provider, creds);
     res.json({
       success,
       activeProvider: provider,
       status: marketDataService.getConnectionStatus(),
-      message: `Active market data feed switched to ${provider.toUpperCase()}`,
+      message: success 
+        ? `Active market data feed switched to ${provider.toUpperCase()}`
+        : `Switched to ${provider.toUpperCase()} (Connection status: ${marketDataService.getConnectionStatus()})`,
     });
   });
 
@@ -195,20 +232,25 @@ export function createApp(
     const userId = (req as any).user.id;
     const encrypted = encryptCredentials(parsed.data);
 
+    // Immediately connect to Angel One and switch live provider
+    const connected = await marketDataService.setProvider('angelone', parsed.data);
+
     const masked: BrokerCredentialMasked = {
       provider: 'angelone',
       clientCode: maskString(parsed.data.clientCode, 2, 2),
       apiKey: maskString(parsed.data.apiKey, 3, 3),
-      status: 'disconnected',
-      isActive: false,
+      status: connected ? 'connected' : 'error',
+      isActive: connected,
     };
 
     if (!credentialsVault.has(userId)) credentialsVault.set(userId, new Map());
     credentialsVault.get(userId)!.set('angelone', { encrypted, masked });
 
     res.json({
-      success: true,
-      message: 'Angel One credentials securely encrypted and stored in vault.',
+      success: connected,
+      message: connected 
+        ? 'Connected to Angel One SmartAPI live feed!'
+        : 'Angel One credentials saved, but authentication failed. Check API key, client code, password and TOTP.',
       credentials: masked,
     });
   });
@@ -228,20 +270,25 @@ export function createApp(
     const userId = (req as any).user.id;
     const encrypted = encryptCredentials(parsed.data);
 
+    // Immediately connect to Upstox and switch live provider
+    const connected = await marketDataService.setProvider('upstox', parsed.data);
+
     const masked: BrokerCredentialMasked = {
       provider: 'upstox',
       clientCode: maskString(parsed.data.apiKey, 3, 3),
       apiKey: maskString(parsed.data.apiKey, 3, 3),
-      status: 'disconnected',
-      isActive: false,
+      status: connected ? 'connected' : 'error',
+      isActive: connected,
     };
 
     if (!credentialsVault.has(userId)) credentialsVault.set(userId, new Map());
     credentialsVault.get(userId)!.set('upstox', { encrypted, masked });
 
     res.json({
-      success: true,
-      message: 'Upstox credentials securely encrypted and stored in vault.',
+      success: connected,
+      message: connected 
+        ? 'Connected to Upstox V3 Live Market Feed! Live exchange ticks active.'
+        : 'Upstox credentials saved, but connection failed. Please check that your access token is valid and not expired.',
       credentials: masked,
     });
   });

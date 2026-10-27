@@ -73,6 +73,7 @@ export class UpstoxAdapter implements IBrokerAdapter {
       if (authRes.data?.status === 'success' && authRes.data?.data?.authorizedRedirectUri) {
         const wsUrl = authRes.data.data.authorizedRedirectUri;
         this.initWebSocket(wsUrl);
+        await this.fetchSpotQuote();
         return true;
       } else {
         throw new Error(authRes.data?.message || 'Failed to authorize Upstox V3 feed.');
@@ -127,10 +128,22 @@ export class UpstoxAdapter implements IBrokerAdapter {
   }
 
   public async fetchInstruments(): Promise<ListedInstrument[]> {
-    // Upstox instruments can be retrieved via option chain endpoint or instrument files
+    const instruments: ListedInstrument[] = [
+      {
+        token: 'NSE_INDEX|Nifty 50',
+        symbol: 'NIFTY 50',
+        name: 'NIFTY',
+        expiry: '',
+        strike: 0,
+        lotSize: 25,
+        instrumentType: 'INDEX',
+        exchange: 'NSE',
+        tickSize: 0.05,
+      }
+    ];
+
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const res = await axios.get(`${this.API_BASE}/option/contract?instrument_key=NSE_INDEX|Nifty 50&expiry_date=${today}`, {
+      const res = await axios.get(`${this.API_BASE}/option/contract?instrument_key=NSE_INDEX|Nifty 50`, {
         headers: {
           'Authorization': `Bearer ${this.credentials?.accessToken || ''}`,
           'Accept': 'application/json',
@@ -139,22 +152,64 @@ export class UpstoxAdapter implements IBrokerAdapter {
       });
 
       if (res.data?.data && Array.isArray(res.data.data)) {
-        return res.data.data.map((c: any) => ({
-          token: c.instrument_key,
-          symbol: c.trading_symbol,
-          name: 'NIFTY',
-          expiry: c.expiry,
-          strike: c.strike_price,
-          lotSize: c.lot_size || 25,
-          instrumentType: c.instrument_type as any,
-          exchange: 'NFO',
-          tickSize: 0.05,
-        }));
+        for (const c of res.data.data) {
+          instruments.push({
+            token: c.instrument_key,
+            symbol: c.trading_symbol,
+            name: 'NIFTY',
+            expiry: c.expiry,
+            strike: c.strike_price,
+            lotSize: c.lot_size || 25,
+            instrumentType: c.instrument_type as any,
+            exchange: 'NFO',
+            tickSize: 0.05,
+          });
+        }
       }
-    } catch {
-      // Fallback
+    } catch (err: any) {
+      console.warn('[Upstox] Option contracts fetch warning:', err.message);
     }
-    return [];
+    return instruments;
+  }
+
+  public async fetchSpotQuote(): Promise<void> {
+    if (!this.credentials?.accessToken) return;
+    try {
+      const res = await axios.get(`${this.API_BASE}/market-quote/quotes?instrument_key=NSE_INDEX|Nifty 50`, {
+        headers: {
+          'Authorization': `Bearer ${this.credentials.accessToken}`,
+          'Accept': 'application/json',
+        },
+        timeout: 8000,
+      });
+
+      const quote = res.data?.data?.['NSE_INDEX:Nifty 50'];
+      if (quote) {
+        const now = new Date().toISOString();
+        const tick: NormalizedMarketTick = {
+          provider: 'upstox',
+          exchange: 'NSE',
+          instrumentKey: 'NSE_INDEX|Nifty 50',
+          tradingSymbol: 'NIFTY 50',
+          instrumentType: 'INDEX',
+          ltp: quote.last_price || 0,
+          open: quote.ohlc?.open || 0,
+          high: quote.ohlc?.high || 0,
+          low: quote.ohlc?.low || 0,
+          close: quote.ohlc?.close || quote.last_price || 0,
+          prevClose: quote.ohlc?.close || 0,
+          priceChange: quote.net_change || 0,
+          changePercent: quote.ohlc?.close ? Number(((quote.net_change / quote.ohlc.close) * 100).toFixed(2)) : 0,
+          volume: quote.volume || 0,
+          exchangeTimestamp: quote.timestamp ? new Date(Number(quote.timestamp)).toISOString() : now,
+          receivedTimestamp: now,
+          isStale: false,
+        };
+        for (const cb of this.tickCallbacks) cb(tick);
+      }
+    } catch (err: any) {
+      console.warn('[Upstox] Initial spot quote error:', err.message);
+    }
   }
 
   public async testConnection(): Promise<{ success: boolean; message: string; details?: any }> {

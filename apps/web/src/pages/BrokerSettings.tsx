@@ -63,9 +63,10 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
         setMsg({ type: 'success', text: res.message });
         setAngelPassword('');
         setAngelTotp('');
+        onSelectBroker('angelone');
         fetchStatus();
       } else {
-        setMsg({ type: 'error', text: res.error || 'Failed to save credentials' });
+        setMsg({ type: 'error', text: res.error || res.message || 'Failed to connect with Angel One credentials' });
       }
     } catch (err: any) {
       setLoading(false);
@@ -88,9 +89,10 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
         setMsg({ type: 'success', text: res.message });
         setUpstoxApiSecret('');
         setUpstoxAccessToken('');
+        onSelectBroker('upstox');
         fetchStatus();
       } else {
-        setMsg({ type: 'error', text: res.error || 'Failed to save credentials' });
+        setMsg({ type: 'error', text: res.error || res.message || 'Failed to connect with Upstox credentials' });
       }
     } catch (err: any) {
       setLoading(false);
