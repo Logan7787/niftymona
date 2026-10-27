@@ -4,7 +4,7 @@
 // ==============================================================================
 
 import React, { useState } from 'react';
-import { SignalOutput, OptionChainSnapshot } from '../types/market.js';
+import { SignalOutput, OptionChainSnapshot } from '../types/market';
 import { 
   Bell, BellRing, Compass, CheckCircle2, XCircle, AlertTriangle, 
   ShieldCheck, Zap, Plus, Trash2, Sliders 

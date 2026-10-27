@@ -7,9 +7,9 @@ import {
   BrokerProvider, OptionChainSnapshot, UnderlyingSnapshot, 
   TechnicalIndicatorData, SignalOutput, PaperAccountSummary, 
   BrokerCredentialMasked 
-} from '../types/market.js';
-import { brokerService, UpstoxStoredCreds, AngelOneStoredCreds } from './brokerService.js';
-import { supabase, isSupabaseConfigured } from '../lib/supabase.js';
+} from '../types/market';
+import { brokerService, UpstoxStoredCreds, AngelOneStoredCreds } from './brokerService';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 export const api = {
   // ----------------------------------------------------------------------------

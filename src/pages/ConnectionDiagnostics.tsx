@@ -4,7 +4,7 @@
 
 import React, { useState } from 'react';
 import { Radio, Wifi, Activity, RefreshCw, CheckCircle2, ShieldCheck } from 'lucide-react';
-import { BrokerProvider, ConnectionStatus } from '../types/market.js';
+import { BrokerProvider, ConnectionStatus } from '../types/market';
 
 interface ConnectionDiagnosticsProps {
   activeProvider: BrokerProvider;

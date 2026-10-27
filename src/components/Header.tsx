@@ -7,8 +7,8 @@ import {
   Activity, RefreshCw, Settings, Shield, User, LogOut, 
   Wifi, WifiOff, Clock 
 } from 'lucide-react';
-import { BrokerProvider, ConnectionStatus, MarketStatus } from '../types/market.js';
-import { useAuth } from '../context/AuthContext.js';
+import { BrokerProvider, ConnectionStatus, MarketStatus } from '../types/market';
+import { useAuth } from '../context/AuthContext';
 
 interface HeaderProps {
   marketStatus?: MarketStatus;

@@ -4,24 +4,24 @@
 // ==============================================================================
 
 import React, { useState } from 'react';
-import { useAuth, AuthProvider } from './context/AuthContext.js';
-import { useMarketData } from './hooks/useMarketData.js';
-import { Header } from './components/Header.js';
-import { TopMarketCards } from './components/TopMarketCards.js';
-import { Navbar, PageId } from './components/Navbar.js';
-import { LoginModal } from './components/LoginModal.js';
+import { useAuth, AuthProvider } from './context/AuthContext';
+import { useMarketData } from './hooks/useMarketData';
+import { Header } from './components/Header';
+import { TopMarketCards } from './components/TopMarketCards';
+import { Navbar, PageId } from './components/Navbar';
+import { LoginModal } from './components/LoginModal';
 
 // Pages
-import { Dashboard } from './pages/Dashboard.js';
-import { LiveOptionChain } from './pages/LiveOptionChain.js';
-import { ATMStrikeAnalysis } from './pages/ATMStrikeAnalysis.js';
-import { TechnicalCharts } from './pages/TechnicalCharts.js';
-import { SignalsAlerts } from './pages/SignalsAlerts.js';
-import { PaperTrading } from './pages/PaperTrading.js';
-import { HistoricalAnalysis } from './pages/HistoricalAnalysis.js';
-import { BrokerSettings } from './pages/BrokerSettings.js';
-import { GeneralSettings } from './pages/GeneralSettings.js';
-import { ConnectionDiagnostics } from './pages/ConnectionDiagnostics.js';
+import { Dashboard } from './pages/Dashboard';
+import { LiveOptionChain } from './pages/LiveOptionChain';
+import { ATMStrikeAnalysis } from './pages/ATMStrikeAnalysis';
+import { TechnicalCharts } from './pages/TechnicalCharts';
+import { SignalsAlerts } from './pages/SignalsAlerts';
+import { PaperTrading } from './pages/PaperTrading';
+import { HistoricalAnalysis } from './pages/HistoricalAnalysis';
+import { BrokerSettings } from './pages/BrokerSettings';
+import { GeneralSettings } from './pages/GeneralSettings';
+import { ConnectionDiagnostics } from './pages/ConnectionDiagnostics';
 
 function MainTerminal() {
   const { isAuthenticated, isLoading } = useAuth();

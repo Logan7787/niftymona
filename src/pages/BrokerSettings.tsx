@@ -4,8 +4,8 @@
 // ==============================================================================
 
 import React, { useState, useEffect } from 'react';
-import { BrokerProvider } from '../types/market.js';
-import { api } from '../services/api.js';
+import { BrokerProvider } from '../types/market';
+import { api } from '../services/api';
 import { 
   KeyRound, ShieldCheck, Check, AlertCircle, RefreshCw, 
   Trash2, ExternalLink, Zap, Lock, Eye, EyeOff 

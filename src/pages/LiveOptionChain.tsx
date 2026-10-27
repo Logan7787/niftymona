@@ -6,7 +6,7 @@
 import React, { useState } from 'react';
 import { 
   OptionChainSnapshot, OptionChainRow, OptionContractData 
-} from '../types/market.js';
+} from '../types/market';
 import { 
   ArrowUpDown, Filter, Eye, Zap, Clock, ShieldCheck, 
   HelpCircle, ChevronDown, Check, TrendingUp, TrendingDown 

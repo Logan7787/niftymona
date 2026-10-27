@@ -7,7 +7,7 @@ import {
   TrendingUp, TrendingDown, Target, Calendar, Gauge, 
   AlertTriangle, ShieldAlert, Cpu 
 } from 'lucide-react';
-import { UnderlyingSnapshot } from '../types/market.js';
+import { UnderlyingSnapshot } from '../types/market';
 
 interface TopMarketCardsProps {
   underlying: UnderlyingSnapshot | null;

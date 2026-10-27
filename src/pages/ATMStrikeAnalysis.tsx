@@ -4,7 +4,7 @@
 // ==============================================================================
 
 import React from 'react';
-import { OptionChainSnapshot, UnderlyingSnapshot } from '../types/market.js';
+import { OptionChainSnapshot, UnderlyingSnapshot } from '../types/market';
 import { Target, TrendingUp, TrendingDown, Layers, Activity, ShieldCheck, Zap } from 'lucide-react';
 
 interface ATMStrikeAnalysisProps {

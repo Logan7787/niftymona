@@ -7,7 +7,7 @@ import {
   Candle, Moneyness, OptionType, UnderlyingSnapshot, OptionChainSnapshot, 
   OptionChainRow, TechnicalIndicatorData, SignalOutput, SignalRuleResult,
   PaperAccountSummary, PaperTradeOrder
-} from '../types/market.js';
+} from '../types/market';
 
 export interface ListedInstrument {
   token: string;

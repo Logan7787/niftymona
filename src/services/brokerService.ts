@@ -9,11 +9,11 @@ import {
   BrokerProvider, ConnectionStatus, NormalizedMarketTick, 
   UnderlyingSnapshot, OptionChainSnapshot, TechnicalIndicatorData, 
   SignalOutput, OptionChainRow, Candle 
-} from '../types/market.js';
+} from '../types/market';
 import { 
   InstrumentService, IndicatorService, SignalService, 
   PaperTradingService, ListedInstrument 
-} from './marketEngine.js';
+} from './marketEngine';
 
 export interface UpstoxStoredCreds {
   apiKey: string;

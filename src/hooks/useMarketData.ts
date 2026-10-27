@@ -7,9 +7,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { 
   UnderlyingSnapshot, OptionChainSnapshot, TechnicalIndicatorData, 
   SignalOutput, BrokerProvider, ConnectionStatus 
-} from '../types/market.js';
-import { brokerService } from '../services/brokerService.js';
-import { api } from '../services/api.js';
+} from '../types/market';
+import { brokerService } from '../services/brokerService';
+import { api } from '../services/api';
 
 export function useMarketData() {
   const [underlying, setUnderlying] = useState<UnderlyingSnapshot | null>(() => brokerService.getUnderlyingSnapshot());

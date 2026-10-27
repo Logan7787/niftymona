@@ -7,7 +7,7 @@ import React from 'react';
 import { 
   UnderlyingSnapshot, OptionChainSnapshot, TechnicalIndicatorData, 
   SignalOutput 
-} from '../types/market.js';
+} from '../types/market';
 import { 
   Zap, ArrowUpRight, ArrowDownRight, ShieldCheck, Target, 
   BarChart2, Compass, AlertCircle, CheckCircle2, XCircle, TrendingUp 

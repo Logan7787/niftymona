@@ -5,7 +5,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { createChart, IChartApi, ISeriesApi } from 'lightweight-charts';
-import { TechnicalIndicatorData, UnderlyingSnapshot } from '../types/market.js';
+import { TechnicalIndicatorData, UnderlyingSnapshot } from '../types/market';
 import { Activity, Clock, Compass, Layers, ShieldCheck } from 'lucide-react';
 
 interface TechnicalChartsProps {

@@ -4,8 +4,8 @@
 // ==============================================================================
 
 import React, { useState, useEffect } from 'react';
-import { PaperAccountSummary, PaperTradeOrder } from '../types/market.js';
-import { api } from '../services/api.js';
+import { PaperAccountSummary, PaperTradeOrder } from '../types/market';
+import { api } from '../services/api';
 import { 
   Briefcase, TrendingUp, TrendingDown, DollarSign, RotateCcw, 
   ShieldAlert, CheckCircle2, Clock, X, Zap 
