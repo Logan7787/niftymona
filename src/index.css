@@ -2,29 +2,91 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Day Theme (Light Mode) Palette */
+  --terminal-950: 241 245 249; /* #f1f5f9 - Clean page background */
+  --terminal-900: 255 255 255; /* #ffffff - Pure white cards & panels */
+  --terminal-850: 248 250 252; /* #f8fafc - Card headers & secondary containers */
+  --terminal-800: 226 232 240; /* #e2e8f0 - Panel borders */
+  --terminal-700: 203 213 225; /* #cbd5e1 - Input & divider borders */
+  --terminal-600: 148 163 184; /* #94a3b8 - Subtle accent borders */
+  color-scheme: light;
+}
+
+.dark {
+  /* Dark Theme (Terminal Mode) Palette */
+  --terminal-950: 6 8 13;      /* #06080d - Deep canvas background */
+  --terminal-900: 11 15 23;    /* #0b0f17 - Dark terminal panels */
+  --terminal-850: 17 23 36;    /* #111724 - Elevated headers */
+  --terminal-800: 23 32 51;    /* #172033 - Dark border outlines */
+  --terminal-700: 35 48 76;    /* #23304c - Divider lines */
+  --terminal-600: 51 68 102;   /* #334466 - Interactive border accents */
+  color-scheme: dark;
+}
+
 @layer base {
   body {
-    background-color: #06080d;
+    background-color: rgb(var(--terminal-950));
     color: #f1f5f9;
     font-family: 'Inter', system-ui, sans-serif;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 }
 
-/* Custom scrollbars for compact high-density data tables */
+/* Day Mode High-Contrast Typography & Surface Styling */
+html:not(.dark) body {
+  color: #0f172a;
+}
+
+/* Ensure white text is dark on light cards, except inside colored action buttons/badges */
+html:not(.dark) .text-white:not([class*="bg-blue-"]):not([class*="bg-emerald-"]):not([class*="bg-rose-"]):not([class*="bg-red-"]):not([class*="bg-green-"]):not([class*="bg-purple-"]):not([class*="bg-indigo-"]):not([class*="bg-amber-"]) {
+  color: #0f172a !important;
+}
+
+html:not(.dark) .text-slate-100:not([class*="bg-blue-"]):not([class*="bg-emerald-"]):not([class*="bg-rose-"]) {
+  color: #0f172a !important;
+}
+
+html:not(.dark) .text-slate-200:not([class*="bg-blue-"]):not([class*="bg-emerald-"]):not([class*="bg-rose-"]) {
+  color: #1e293b !important;
+}
+
+html:not(.dark) .text-slate-300:not([class*="bg-blue-"]):not([class*="bg-emerald-"]):not([class*="bg-rose-"]) {
+  color: #334155 !important;
+}
+
+html:not(.dark) .text-slate-400 {
+  color: #64748b !important;
+}
+
+/* Day mode form controls */
+html:not(.dark) input,
+html:not(.dark) select,
+html:not(.dark) textarea {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+
+html:not(.dark) input::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #0b0f17;
+  background: rgb(var(--terminal-900));
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: rgb(var(--terminal-700));
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: rgb(var(--terminal-600));
 }

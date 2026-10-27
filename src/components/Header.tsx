@@ -5,10 +5,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Activity, RefreshCw, Settings, Shield, User, LogOut, 
-  Wifi, WifiOff, Clock 
+  Wifi, WifiOff, Clock, Sun, Moon 
 } from 'lucide-react';
 import { BrokerProvider, ConnectionStatus, MarketStatus } from '../types/market';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 interface HeaderProps {
   marketStatus?: MarketStatus;
@@ -30,6 +31,7 @@ export const Header: React.FC<HeaderProps> = ({
   latencyMs = 12,
 }) => {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [istTime, setIstTime] = useState<string>('');
 
   useEffect(() => {
@@ -140,10 +142,29 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2">
+          {/* Day / Dark Theme Switcher Button */}
+          <button
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Switch to Day Theme (Light Mode)' : 'Switch to Dark Theme'}
+            className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-terminal-700 bg-terminal-850 text-xs font-mono font-medium text-slate-700 dark:text-slate-300 hover:border-terminal-600 transition-colors cursor-pointer shadow-sm"
+          >
+            {theme === 'dark' ? (
+              <>
+                <Sun className="h-3.5 w-3.5 text-amber-400" />
+                <span className="hidden sm:inline text-amber-300 text-[11px] font-semibold">Day</span>
+              </>
+            ) : (
+              <>
+                <Moon className="h-3.5 w-3.5 text-indigo-600" />
+                <span className="hidden sm:inline text-indigo-700 text-[11px] font-semibold">Dark</span>
+              </>
+            )}
+          </button>
+
           <button
             onClick={onRefresh}
             title="Manual Feed Refresh"
-            className="flex items-center justify-center h-8 w-8 rounded-lg border border-terminal-700 bg-terminal-850 text-slate-300 hover:text-white hover:border-terminal-600 transition-colors cursor-pointer"
+            className="flex items-center justify-center h-8 w-8 rounded-lg border border-terminal-700 bg-terminal-850 text-slate-700 dark:text-slate-300 hover:text-blue-500 dark:hover:text-white hover:border-terminal-600 transition-colors cursor-pointer"
           >
             <RefreshCw className="h-3.5 w-3.5" />
           </button>
@@ -151,9 +172,9 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={onOpenSettings}
             title="Configure Broker APIs"
-            className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-terminal-700 bg-terminal-850 text-xs font-medium text-slate-200 hover:text-white hover:border-blue-500/50 transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-terminal-700 bg-terminal-850 text-xs font-medium text-slate-700 dark:text-slate-200 hover:text-blue-500 dark:hover:text-white hover:border-blue-500/50 transition-colors cursor-pointer"
           >
-            <Settings className="h-3.5 w-3.5 text-blue-400" />
+            <Settings className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" />
             <span className="hidden sm:inline">Settings</span>
           </button>
 

@@ -7,6 +7,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createChart, IChartApi, ISeriesApi } from 'lightweight-charts';
 import { TechnicalIndicatorData, UnderlyingSnapshot } from '../types/market';
 import { Activity, Clock, Compass, Layers, ShieldCheck } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
 
 interface TechnicalChartsProps {
   indicators: TechnicalIndicatorData | null;
@@ -14,6 +15,7 @@ interface TechnicalChartsProps {
 }
 
 export const TechnicalCharts: React.FC<TechnicalChartsProps> = ({ indicators, underlying }) => {
+  const { isDark } = useTheme();
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<IChartApi | null>(null);
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -37,25 +39,25 @@ export const TechnicalCharts: React.FC<TechnicalChartsProps> = ({ indicators, un
       width: initialWidth,
       height: 480,
       layout: {
-        background: { color: '#090e17' },
-        textColor: '#94a3b8',
+        background: { color: isDark ? '#090e17' : '#ffffff' },
+        textColor: isDark ? '#94a3b8' : '#475569',
         fontSize: 12,
         fontFamily: 'JetBrains Mono, monospace',
       },
       grid: {
-        vertLines: { color: '#131b2c' },
-        horzLines: { color: '#131b2c' },
+        vertLines: { color: isDark ? '#131b2c' : '#f1f5f9' },
+        horzLines: { color: isDark ? '#131b2c' : '#f1f5f9' },
       },
       crosshair: {
         mode: 0,
       },
       timeScale: {
-        borderColor: '#1e293b',
+        borderColor: isDark ? '#1e293b' : '#e2e8f0',
         timeVisible: true,
         secondsVisible: false,
       },
       rightPriceScale: {
-        borderColor: '#1e293b',
+        borderColor: isDark ? '#1e293b' : '#e2e8f0',
       },
     });
 
@@ -112,6 +114,27 @@ export const TechnicalCharts: React.FC<TechnicalChartsProps> = ({ indicators, un
       vwapSeriesRef.current = null;
     };
   }, []);
+
+  // Update chart layout options when user switches between Dark and Day theme
+  useEffect(() => {
+    if (!chartInstanceRef.current) return;
+    chartInstanceRef.current.applyOptions({
+      layout: {
+        background: { color: isDark ? '#090e17' : '#ffffff' },
+        textColor: isDark ? '#94a3b8' : '#475569',
+      },
+      grid: {
+        vertLines: { color: isDark ? '#131b2c' : '#f1f5f9' },
+        horzLines: { color: isDark ? '#131b2c' : '#f1f5f9' },
+      },
+      timeScale: {
+        borderColor: isDark ? '#1e293b' : '#e2e8f0',
+      },
+      rightPriceScale: {
+        borderColor: isDark ? '#1e293b' : '#e2e8f0',
+      },
+    });
+  }, [isDark]);
 
   // Update chart data whenever indicators or underlying changes
   useEffect(() => {

@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import { useAuth, AuthProvider } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
 import { useMarketData } from './hooks/useMarketData';
 import { Header } from './components/Header';
 import { TopMarketCards } from './components/TopMarketCards';
@@ -42,7 +43,7 @@ function MainTerminal() {
   };
 
   return (
-    <div className="min-h-screen bg-terminal-950 text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-terminal-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
       {/* 
         Mandatory Username Login Dialog
         Enforces login when opening the application
@@ -187,8 +188,10 @@ function MainTerminal() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <MainTerminal />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <MainTerminal />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

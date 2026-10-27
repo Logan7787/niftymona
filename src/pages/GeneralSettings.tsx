@@ -3,9 +3,11 @@
 // ==============================================================================
 
 import React, { useState } from 'react';
-import { Sliders, Volume2, Monitor, RefreshCw, Check } from 'lucide-react';
+import { Sliders, Volume2, Monitor, RefreshCw, Check, Sun, Moon } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
 
 export const GeneralSettings: React.FC = () => {
+  const { theme, setTheme } = useTheme();
   const [defaultRange, setDefaultRange] = useState(10);
   const [defaultTimeframe, setDefaultTimeframe] = useState('5m');
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -34,6 +36,36 @@ export const GeneralSettings: React.FC = () => {
         )}
 
         <form onSubmit={handleSave} className="mt-4 space-y-4 text-xs">
+          <div>
+            <label className="text-slate-300 block mb-1.5 font-semibold uppercase">TERMINAL THEME (APPEARANCE)</label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setTheme('dark')}
+                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border cursor-pointer transition-all ${
+                  theme === 'dark'
+                    ? 'border-blue-500 bg-blue-600/20 text-white font-bold ring-1 ring-blue-500/50 shadow-md'
+                    : 'border-terminal-700 bg-terminal-850 text-slate-400 hover:text-white'
+                }`}
+              >
+                <Moon className="h-4 w-4 text-indigo-400" />
+                <span>Dark Theme (Night)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTheme('light')}
+                className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border cursor-pointer transition-all ${
+                  theme === 'light'
+                    ? 'border-blue-500 bg-blue-600/20 text-blue-600 dark:text-white font-bold ring-1 ring-blue-500/50 shadow-md'
+                    : 'border-terminal-700 bg-terminal-850 text-slate-400 hover:text-slate-700 dark:hover:text-white'
+                }`}
+              >
+                <Sun className="h-4 w-4 text-amber-500" />
+                <span>Day Theme (Light)</span>
+              </button>
+            </div>
+          </div>
+
           <div>
             <label className="text-slate-300 block mb-1 font-semibold">DEFAULT STRIKE RANGE (WINDOW)</label>
             <select

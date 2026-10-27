@@ -9,12 +9,12 @@ export default {
     extend: {
       colors: {
         terminal: {
-          950: '#06080d',
-          900: '#0b0f17',
-          850: '#111724',
-          800: '#172033',
-          700: '#23304c',
-          600: '#334466',
+          950: 'rgb(var(--terminal-950) / <alpha-value>)',
+          900: 'rgb(var(--terminal-900) / <alpha-value>)',
+          850: 'rgb(var(--terminal-850) / <alpha-value>)',
+          800: 'rgb(var(--terminal-800) / <alpha-value>)',
+          700: 'rgb(var(--terminal-700) / <alpha-value>)',
+          600: 'rgb(var(--terminal-600) / <alpha-value>)',
         },
         trade: {
           green: '#00e676',
