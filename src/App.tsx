@@ -13,6 +13,7 @@ import { LoginModal } from './components/LoginModal';
 
 // Pages
 import { Dashboard } from './pages/Dashboard';
+import { StrikeMonitor } from './pages/StrikeMonitor';
 import { LiveOptionChain } from './pages/LiveOptionChain';
 import { ATMStrikeAnalysis } from './pages/ATMStrikeAnalysis';
 import { TechnicalCharts } from './pages/TechnicalCharts';
@@ -82,6 +83,16 @@ function MainTerminal() {
             onNavigateToChain={() => setActivePage('option-chain')}
             onNavigateToSignals={() => setActivePage('signals')}
             onQuickTrade={handleQuickTrade}
+          />
+        )}
+
+        {activePage === 'strike-monitor' && (
+          <StrikeMonitor
+            underlying={market.underlying}
+            optionChain={market.optionChain}
+            onTradeClick={handleQuickTrade}
+            onSelectExpiry={market.changeExpiry}
+            onNavigateToPage={setActivePage}
           />
         )}
 

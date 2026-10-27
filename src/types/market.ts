@@ -74,6 +74,10 @@ export interface OptionContractData {
   ltp: number | null;
   change: number | null;
   changePercent: number | null;
+  open?: number | null;
+  high?: number | null;
+  low?: number | null;
+  prevClose?: number | null;
   bid: number | null;
   ask: number | null;
   volume: number | null;
