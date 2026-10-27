@@ -44,7 +44,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activePage, onSelectPage, openTr
   ];
 
   return (
-    <div className="border-b border-terminal-800 bg-terminal-900/60 px-4 overflow-x-auto scrollbar-none">
+    <div className="border-b border-terminal-800 bg-terminal-900/60 px-2 sm:px-4 overflow-x-auto scrollbar-thin">
       <nav className="flex space-x-1 min-w-max py-1.5" aria-label="Tabs">
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -53,13 +53,13 @@ export const Navbar: React.FC<NavbarProps> = ({ activePage, onSelectPage, openTr
             <button
               key={item.id}
               onClick={() => onSelectPage(item.id as PageId)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
                 isActive
-                  ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-terminal-800/60 border border-transparent'
+                  ? 'bg-blue-600/15 text-blue-600 dark:text-blue-400 border border-blue-500/40 shadow-sm font-semibold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-terminal-800/40 border border-transparent'
               }`}
             >
-              <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-blue-400' : 'text-slate-400'}`} />
+              <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-500 dark:text-slate-400'}`} />
               <span>{item.label}</span>
               {item.badge !== undefined && (
                 <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-blue-600 text-white font-bold">

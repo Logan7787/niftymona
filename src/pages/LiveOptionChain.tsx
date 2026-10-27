@@ -148,52 +148,52 @@ export const LiveOptionChain: React.FC<LiveOptionChainProps> = ({
       {/* Main Option Chain Table */}
       <div className="rounded-xl border border-terminal-800 bg-terminal-900 overflow-hidden shadow-2xl">
         <div className="overflow-x-auto">
-          <table className="w-full text-left font-mono text-xs border-collapse">
+          <table className="w-full min-w-[760px] text-left font-mono text-xs border-collapse">
             <thead>
               {/* Top Group Header */}
               <tr className="border-b border-terminal-800 text-xs font-bold text-center">
-                <th colSpan={showGreeks ? 9 : 5} className="py-2 px-3 bg-emerald-950/25 text-emerald-400 border-r border-terminal-800 tracking-wider uppercase">
+                <th colSpan={showGreeks ? 9 : 5} className="py-2 px-3 bg-emerald-950/25 text-emerald-500 dark:text-emerald-400 border-r border-terminal-800 tracking-wider uppercase">
                   CALL OPTIONS (CE)
                 </th>
-                <th className="py-2 px-4 bg-terminal-800 text-white border-r border-terminal-800 tracking-wider uppercase">
+                <th className="py-2 px-4 bg-terminal-800 text-slate-900 dark:text-white border-r border-terminal-800 tracking-wider uppercase">
                   STRIKE
                 </th>
-                <th colSpan={showGreeks ? 9 : 5} className="py-2 px-3 bg-rose-950/25 text-rose-400 tracking-wider uppercase">
+                <th colSpan={showGreeks ? 9 : 5} className="py-2 px-3 bg-rose-950/25 text-rose-500 dark:text-rose-400 tracking-wider uppercase">
                   PUT OPTIONS (PE)
                 </th>
               </tr>
               {/* Column Headers */}
-              <tr className="border-b border-terminal-800 text-[11px] text-slate-400 bg-terminal-950/70">
+              <tr className="border-b border-terminal-800 text-[11px] text-slate-500 dark:text-slate-400 bg-terminal-950/70">
                 {/* CE Columns */}
-                <th onClick={() => handleSort('ceOi')} className="py-2 px-2 text-right cursor-pointer hover:text-white">
+                <th onClick={() => handleSort('ceOi')} className="py-2 px-2 text-right cursor-pointer hover:text-slate-900 dark:hover:text-white">
                   OI {sortField === 'ceOi' && (sortAsc ? '▲' : '▼')}
                 </th>
                 <th className="py-2 px-2 text-right">Chg OI</th>
                 <th className="py-2 px-2 text-right">Volume</th>
-                {showGreeks && <th className="py-2 px-1 text-right text-purple-400">IV</th>}
-                {showGreeks && <th className="py-2 px-1 text-right text-purple-400">Delta</th>}
-                {showGreeks && <th className="py-2 px-1 text-right text-purple-400">Theta</th>}
-                <th className="py-2 px-2 text-right text-slate-300">Bid / Ask</th>
-                <th onClick={() => handleSort('ceLtp')} className="py-2 px-2.5 text-right font-bold text-emerald-400 border-r border-terminal-800 cursor-pointer">
+                {showGreeks && <th className="py-2 px-1 text-right text-purple-600 dark:text-purple-400">IV</th>}
+                {showGreeks && <th className="py-2 px-1 text-right text-purple-600 dark:text-purple-400">Delta</th>}
+                {showGreeks && <th className="py-2 px-1 text-right text-purple-600 dark:text-purple-400">Theta</th>}
+                <th className="py-2 px-2 text-right text-slate-600 dark:text-slate-300">Bid / Ask</th>
+                <th onClick={() => handleSort('ceLtp')} className="py-2 px-2.5 text-right font-bold text-emerald-600 dark:text-emerald-400 border-r border-terminal-800 cursor-pointer">
                   LTP {sortField === 'ceLtp' && (sortAsc ? '▲' : '▼')}
                 </th>
 
                 {/* Strike Center Header */}
-                <th onClick={() => handleSort('strike')} className="py-2 px-3 text-center bg-terminal-850 text-white font-bold border-r border-terminal-800 cursor-pointer">
+                <th onClick={() => handleSort('strike')} className="py-2 px-3 text-center bg-terminal-850 text-slate-900 dark:text-white font-bold border-r border-terminal-800 cursor-pointer">
                   STRIKE {sortField === 'strike' && (sortAsc ? '▲' : '▼')}
                 </th>
 
                 {/* PE Columns */}
-                <th onClick={() => handleSort('peLtp')} className="py-2 px-2.5 text-left font-bold text-rose-400 border-r border-terminal-800/40 cursor-pointer">
+                <th onClick={() => handleSort('peLtp')} className="py-2 px-2.5 text-left font-bold text-rose-600 dark:text-rose-400 border-r border-terminal-800/40 cursor-pointer">
                   LTP {sortField === 'peLtp' && (sortAsc ? '▲' : '▼')}
                 </th>
-                <th className="py-2 px-2 text-left text-slate-300">Bid / Ask</th>
-                {showGreeks && <th className="py-2 px-1 text-left text-purple-400">IV</th>}
-                {showGreeks && <th className="py-2 px-1 text-left text-purple-400">Delta</th>}
-                {showGreeks && <th className="py-2 px-1 text-left text-purple-400">Theta</th>}
+                <th className="py-2 px-2 text-left text-slate-600 dark:text-slate-300">Bid / Ask</th>
+                {showGreeks && <th className="py-2 px-1 text-left text-purple-600 dark:text-purple-400">IV</th>}
+                {showGreeks && <th className="py-2 px-1 text-left text-purple-600 dark:text-purple-400">Delta</th>}
+                {showGreeks && <th className="py-2 px-1 text-left text-purple-600 dark:text-purple-400">Theta</th>}
                 <th className="py-2 px-2 text-left">Volume</th>
                 <th className="py-2 px-2 text-left">Chg OI</th>
-                <th onClick={() => handleSort('peOi')} className="py-2 px-2 text-left cursor-pointer hover:text-white">
+                <th onClick={() => handleSort('peOi')} className="py-2 px-2 text-left cursor-pointer hover:text-slate-900 dark:hover:text-white">
                   OI {sortField === 'peOi' && (sortAsc ? '▲' : '▼')}
                 </th>
               </tr>
@@ -214,38 +214,38 @@ export const LiveOptionChain: React.FC<LiveOptionChainProps> = ({
                     }`}
                   >
                     {/* CE Side */}
-                    <td className={`py-2 px-2 text-right ${isCeItm ? 'bg-amber-500/[0.04]' : ''} text-slate-300`}>
+                    <td className={`py-2 px-2 text-right ${isCeItm ? 'bg-amber-500/[0.08]' : ''} text-slate-700 dark:text-slate-300`}>
                       {row.ce.oi ? row.ce.oi.toLocaleString('en-IN') : 'N/A'}
                     </td>
-                    <td className={`py-2 px-2 text-right ${isCeItm ? 'bg-amber-500/[0.04]' : ''} ${(row.ce.oiChange || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    <td className={`py-2 px-2 text-right ${isCeItm ? 'bg-amber-500/[0.08]' : ''} ${(row.ce.oiChange || 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                       {row.ce.oiChange !== null ? `${row.ce.oiChange >= 0 ? '+' : ''}${row.ce.oiChange.toLocaleString('en-IN')}` : 'N/A'}
                     </td>
-                    <td className={`py-2 px-2 text-right ${isCeItm ? 'bg-amber-500/[0.04]' : ''} text-slate-400`}>
+                    <td className={`py-2 px-2 text-right ${isCeItm ? 'bg-amber-500/[0.08]' : ''} text-slate-500 dark:text-slate-400`}>
                       {row.ce.volume ? row.ce.volume.toLocaleString('en-IN') : 'N/A'}
                     </td>
                     {showGreeks && (
-                      <td className={`py-2 px-1 text-right text-purple-300 ${isCeItm ? 'bg-amber-500/[0.04]' : ''}`}>
+                      <td className={`py-2 px-1 text-right text-purple-600 dark:text-purple-300 ${isCeItm ? 'bg-amber-500/[0.08]' : ''}`}>
                         {row.ce.iv ? `${row.ce.iv.toFixed(1)}%` : 'N/A'}
                       </td>
                     )}
                     {showGreeks && (
-                      <td className={`py-2 px-1 text-right text-purple-300 ${isCeItm ? 'bg-amber-500/[0.04]' : ''}`}>
+                      <td className={`py-2 px-1 text-right text-purple-600 dark:text-purple-300 ${isCeItm ? 'bg-amber-500/[0.08]' : ''}`}>
                         {row.ce.delta ? row.ce.delta.toFixed(2) : 'N/A'}
                       </td>
                     )}
                     {showGreeks && (
-                      <td className={`py-2 px-1 text-right text-purple-300 ${isCeItm ? 'bg-amber-500/[0.04]' : ''}`}>
+                      <td className={`py-2 px-1 text-right text-purple-600 dark:text-purple-300 ${isCeItm ? 'bg-amber-500/[0.08]' : ''}`}>
                         {row.ce.theta ? row.ce.theta.toFixed(1) : 'N/A'}
                       </td>
                     )}
-                    <td className={`py-2 px-2 text-right text-[10px] text-slate-400 ${isCeItm ? 'bg-amber-500/[0.04]' : ''}`}>
+                    <td className={`py-2 px-2 text-right text-[10px] text-slate-500 dark:text-slate-400 ${isCeItm ? 'bg-amber-500/[0.08]' : ''}`}>
                       {row.ce.bid !== null ? `${row.ce.bid} / ${row.ce.ask}` : 'N/A'}
                     </td>
                     <td 
                       onClick={() => onTradeClick(row.ce.symbol, row.strike, 'CE', row.ce.ltp || 100)}
                       title="Click to simulate paper order"
-                      className={`py-2 px-2.5 text-right font-bold text-emerald-400 border-r border-terminal-800 cursor-pointer hover:bg-emerald-500/20 transition-colors ${
-                        isCeItm ? 'bg-amber-500/[0.08]' : ''
+                      className={`py-2 px-2.5 text-right font-bold text-emerald-600 dark:text-emerald-400 border-r border-terminal-800 cursor-pointer hover:bg-emerald-500/20 transition-colors ${
+                        isCeItm ? 'bg-amber-500/[0.12]' : ''
                       }`}
                     >
                       ₹{row.ce.ltp !== null ? row.ce.ltp.toFixed(2) : 'N/A'}
@@ -254,8 +254,8 @@ export const LiveOptionChain: React.FC<LiveOptionChainProps> = ({
                     {/* STRIKE (Center) */}
                     <td className={`py-2 px-3 text-center font-bold border-r border-terminal-800 ${
                       isAtm 
-                        ? 'bg-blue-600/30 text-blue-200 ring-2 ring-blue-500' 
-                        : 'bg-terminal-850 text-white'
+                        ? 'bg-blue-600/20 text-blue-700 dark:text-blue-200 ring-2 ring-blue-500' 
+                        : 'bg-terminal-850 text-slate-900 dark:text-white'
                     }`}>
                       <div className="flex items-center justify-center gap-1.5">
                         <span>{row.strike}</span>
@@ -271,37 +271,37 @@ export const LiveOptionChain: React.FC<LiveOptionChainProps> = ({
                     <td 
                       onClick={() => onTradeClick(row.pe.symbol, row.strike, 'PE', row.pe.ltp || 100)}
                       title="Click to simulate paper order"
-                      className={`py-2 px-2.5 text-left font-bold text-rose-400 border-r border-terminal-800/40 cursor-pointer hover:bg-rose-500/20 transition-colors ${
-                        isPeItm ? 'bg-purple-500/[0.08]' : ''
+                      className={`py-2 px-2.5 text-left font-bold text-rose-600 dark:text-rose-400 border-r border-terminal-800/40 cursor-pointer hover:bg-rose-500/20 transition-colors ${
+                        isPeItm ? 'bg-purple-500/[0.12]' : ''
                       }`}
                     >
                       ₹{row.pe.ltp !== null ? row.pe.ltp.toFixed(2) : 'N/A'}
                     </td>
-                    <td className={`py-2 px-2 text-left text-[10px] text-slate-400 ${isPeItm ? 'bg-purple-500/[0.04]' : ''}`}>
+                    <td className={`py-2 px-2 text-left text-[10px] text-slate-500 dark:text-slate-400 ${isPeItm ? 'bg-purple-500/[0.08]' : ''}`}>
                       {row.pe.bid !== null ? `${row.pe.bid} / ${row.pe.ask}` : 'N/A'}
                     </td>
                     {showGreeks && (
-                      <td className={`py-2 px-1 text-left text-purple-300 ${isPeItm ? 'bg-purple-500/[0.04]' : ''}`}>
+                      <td className={`py-2 px-1 text-left text-purple-600 dark:text-purple-300 ${isPeItm ? 'bg-purple-500/[0.08]' : ''}`}>
                         {row.pe.iv ? `${row.pe.iv.toFixed(1)}%` : 'N/A'}
                       </td>
                     )}
                     {showGreeks && (
-                      <td className={`py-2 px-1 text-left text-purple-300 ${isPeItm ? 'bg-purple-500/[0.04]' : ''}`}>
+                      <td className={`py-2 px-1 text-left text-purple-600 dark:text-purple-300 ${isPeItm ? 'bg-purple-500/[0.08]' : ''}`}>
                         {row.pe.delta ? row.pe.delta.toFixed(2) : 'N/A'}
                       </td>
                     )}
                     {showGreeks && (
-                      <td className={`py-2 px-1 text-left text-purple-300 ${isPeItm ? 'bg-purple-500/[0.04]' : ''}`}>
+                      <td className={`py-2 px-1 text-left text-purple-600 dark:text-purple-300 ${isPeItm ? 'bg-purple-500/[0.08]' : ''}`}>
                         {row.pe.theta ? row.pe.theta.toFixed(1) : 'N/A'}
                       </td>
                     )}
-                    <td className={`py-2 px-2 text-left text-slate-400 ${isPeItm ? 'bg-purple-500/[0.04]' : ''}`}>
+                    <td className={`py-2 px-2 text-left text-slate-500 dark:text-slate-400 ${isPeItm ? 'bg-purple-500/[0.08]' : ''}`}>
                       {row.pe.volume ? row.pe.volume.toLocaleString('en-IN') : 'N/A'}
                     </td>
-                    <td className={`py-2 px-2 text-left ${isPeItm ? 'bg-purple-500/[0.04]' : ''} ${(row.pe.oiChange || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    <td className={`py-2 px-2 text-left ${isPeItm ? 'bg-purple-500/[0.08]' : ''} ${(row.pe.oiChange || 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                       {row.pe.oiChange !== null ? `${row.pe.oiChange >= 0 ? '+' : ''}${row.pe.oiChange.toLocaleString('en-IN')}` : 'N/A'}
                     </td>
-                    <td className={`py-2 px-2 text-left ${isPeItm ? 'bg-purple-500/[0.04]' : ''} text-slate-300`}>
+                    <td className={`py-2 px-2 text-left ${isPeItm ? 'bg-purple-500/[0.08]' : ''} text-slate-700 dark:text-slate-300`}>
                       {row.pe.oi ? row.pe.oi.toLocaleString('en-IN') : 'N/A'}
                     </td>
                   </tr>

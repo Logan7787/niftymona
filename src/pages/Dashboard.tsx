@@ -226,12 +226,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left font-mono text-xs border-collapse">
+          <table className="w-full min-w-[580px] text-left font-mono text-xs border-collapse">
             <thead>
               <tr className="border-b border-terminal-800 text-[11px] text-slate-400 bg-terminal-950/50">
                 <th className="py-2.5 px-3 text-right">Call OI</th>
                 <th className="py-2.5 px-3 text-right">Call LTP</th>
-                <th className="py-2.5 px-3 text-center bg-terminal-850 text-white font-bold">STRIKE</th>
+                <th className="py-2.5 px-3 text-center bg-terminal-850 text-slate-800 dark:text-white font-bold">STRIKE</th>
                 <th className="py-2.5 px-3 text-left">Put LTP</th>
                 <th className="py-2.5 px-3 text-left">Put OI</th>
                 <th className="py-2.5 px-3 text-center">Action</th>
@@ -245,22 +245,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     row.isAtm ? 'bg-blue-600/10 font-semibold' : ''
                   }`}
                 >
-                  <td className="py-2 px-3 text-right text-slate-300">
+                  <td className="py-2 px-3 text-right text-slate-600 dark:text-slate-300">
                     {(row.ce.oi || 0).toLocaleString('en-IN')}
                   </td>
-                  <td className="py-2 px-3 text-right text-emerald-400 font-semibold">
+                  <td className="py-2 px-3 text-right text-emerald-600 dark:text-emerald-400 font-semibold">
                     ₹{row.ce.ltp?.toFixed(2) || 'N/A'}
                   </td>
                   <td className={`py-2 px-3 text-center font-bold ${
-                    row.isAtm ? 'bg-blue-600/30 text-blue-300 ring-1 ring-blue-500/50' : 'bg-terminal-850/60 text-white'
+                    row.isAtm ? 'bg-blue-600/20 text-blue-700 dark:text-blue-300 ring-1 ring-blue-500/50' : 'bg-terminal-850/60 text-slate-900 dark:text-white'
                   }`}>
                     {row.strike}
-                    {row.isAtm && <span className="ml-1 text-[9px] px-1 py-0.2 rounded bg-blue-500 text-white">ATM</span>}
+                    {row.isAtm && <span className="ml-1 text-[9px] px-1 py-0.2 rounded bg-blue-600 text-white">ATM</span>}
                   </td>
-                  <td className="py-2 px-3 text-left text-rose-400 font-semibold">
+                  <td className="py-2 px-3 text-left text-rose-600 dark:text-rose-400 font-semibold">
                     ₹{row.pe.ltp?.toFixed(2) || 'N/A'}
                   </td>
-                  <td className="py-2 px-3 text-left text-slate-300">
+                  <td className="py-2 px-3 text-left text-slate-600 dark:text-slate-300">
                     {(row.pe.oi || 0).toLocaleString('en-IN')}
                   </td>
                   <td className="py-2 px-3 text-center">
