@@ -4,38 +4,41 @@
 
 :root {
   /* Day Theme (Light Mode) Palette */
-  --terminal-950: 248 250 252; /* #f8fafc - Crisp light canvas */
-  --terminal-900: 255 255 255; /* #ffffff - Pure white panels */
-  --terminal-850: 241 245 249; /* #f1f5f9 - Secondary cards & table headers */
-  --terminal-800: 226 232 240; /* #e2e8f0 - Clean border lines */
-  --terminal-700: 203 213 225; /* #cbd5e1 - Input & divider borders */
-  --terminal-600: 148 163 184; /* #94a3b8 - Accent borders */
+  --terminal-950: 248 250 252; /* #f8fafc */
+  --terminal-900: 255 255 255; /* #ffffff */
+  --terminal-850: 241 245 249; /* #f1f5f9 */
+  --terminal-800: 226 232 240; /* #e2e8f0 */
+  --terminal-700: 203 213 225; /* #cbd5e1 */
+  --terminal-600: 148 163 184; /* #94a3b8 */
   color-scheme: light;
 }
 
 .dark {
   /* Dark Theme (Terminal Mode) Palette */
-  --terminal-950: 6 8 13;      /* #06080d - Deep dark background */
-  --terminal-900: 11 15 23;    /* #0b0f17 - Dark terminal panels */
-  --terminal-850: 17 23 36;    /* #111724 - Elevated headers */
-  --terminal-800: 23 32 51;    /* #172033 - Dark border outlines */
-  --terminal-700: 35 48 76;    /* #23304c - Divider lines */
-  --terminal-600: 51 68 102;   /* #334466 - Interactive border accents */
+  --terminal-950: 6 8 13;      /* #06080d */
+  --terminal-900: 11 15 23;    /* #0b0f17 */
+  --terminal-850: 17 23 36;    /* #111724 */
+  --terminal-800: 23 32 51;    /* #172033 */
+  --terminal-700: 35 48 76;    /* #23304c */
+  --terminal-600: 51 68 102;   /* #334466 */
   color-scheme: dark;
 }
 
 @layer base {
   body {
     background-color: rgb(var(--terminal-950));
-    color: #f1f5f9;
+    color: rgb(15 23 42);
     font-family: 'Inter', system-ui, sans-serif;
     transition: background-color 0.2s ease, color 0.2s ease;
+  }
+  .dark body {
+    color: rgb(241 245 249);
   }
 }
 
 /* ==============================================================================
-   DAY THEME (LIGHT MODE) EXPLICIT OVERRIDES
-   Guarantees 100% white/light surfaces and high contrast across all components
+   LIGHT / DAY THEME (html:not(.dark) & html.light)
+   High-contrast typography, crisp white cards, and vibrant indicators
    ============================================================================== */
 
 html:not(.dark),
@@ -49,52 +52,35 @@ html.light body {
   color: #0f172a !important;
 }
 
-/* Background surfaces */
-html:not(.dark) .bg-terminal-950,
-html.light .bg-terminal-950 {
+/* Surfaces */
+html:not(.dark) [class*="bg-terminal-950"],
+html.light [class*="bg-terminal-950"] {
   background-color: #f8fafc !important;
 }
 
-html:not(.dark) .bg-terminal-900,
-html:not(.dark) .bg-terminal-900\/90,
-html:not(.dark) .bg-terminal-900\/80,
-html:not(.dark) .bg-terminal-900\/60,
-html.light .bg-terminal-900,
-html.light .bg-terminal-900\/90,
-html.light .bg-terminal-900\/80,
-html.light .bg-terminal-900\/60 {
+html:not(.dark) [class*="bg-terminal-900"],
+html.light [class*="bg-terminal-900"] {
   background-color: #ffffff !important;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
 }
 
-html:not(.dark) .bg-terminal-850,
-html:not(.dark) .bg-terminal-850\/60,
-html.light .bg-terminal-850,
-html.light .bg-terminal-850\/60 {
+html:not(.dark) [class*="bg-terminal-850"],
+html.light [class*="bg-terminal-850"] {
   background-color: #f1f5f9 !important;
 }
 
 /* Borders */
-html:not(.dark) .border-terminal-800,
-html:not(.dark) .border-terminal-800\/40,
-html.light .border-terminal-800,
-html.light .border-terminal-800\/40 {
+html:not(.dark) [class*="border-terminal-800"],
+html.light [class*="border-terminal-800"] {
   border-color: #e2e8f0 !important;
 }
 
-html:not(.dark) .border-terminal-700,
-html:not(.dark) .border-terminal-700\/60,
-html.light .border-terminal-700,
-html.light .border-terminal-700\/60 {
+html:not(.dark) [class*="border-terminal-700"],
+html.light [class*="border-terminal-700"] {
   border-color: #cbd5e1 !important;
 }
 
-html:not(.dark) .border-terminal-600,
-html.light .border-terminal-600 {
-  border-color: #94a3b8 !important;
-}
-
-/* High-Contrast Typography */
+/* High-Contrast Typography in Light Mode */
 html:not(.dark) .text-white,
 html.light .text-white {
   color: #0f172a !important;
@@ -114,30 +100,57 @@ html.light .text-slate-300 {
 
 html:not(.dark) .text-slate-400,
 html.light .text-slate-400 {
-  color: #64748b !important;
+  color: #475569 !important;
 }
 
-/* Ensure buttons & action pills with solid backgrounds keep their text white */
-html:not(.dark) [class*="bg-blue-600"],
-html:not(.dark) [class*="bg-blue-600"] *,
-html:not(.dark) [class*="bg-emerald-600"],
-html:not(.dark) [class*="bg-emerald-600"] *,
-html:not(.dark) [class*="bg-rose-600"],
-html:not(.dark) [class*="bg-rose-600"] *,
-html:not(.dark) [class*="bg-red-600"],
-html:not(.dark) [class*="bg-red-600"] *,
-html:not(.dark) [class*="bg-purple-600"],
-html:not(.dark) [class*="bg-purple-600"] *,
-html.light [class*="bg-blue-600"],
-html.light [class*="bg-blue-600"] *,
-html.light [class*="bg-emerald-600"],
-html.light [class*="bg-emerald-600"] *,
-html.light [class*="bg-rose-600"],
-html.light [class*="bg-rose-600"] *,
-html.light [class*="bg-red-600"],
-html.light [class*="bg-red-600"] *,
-html.light [class*="bg-purple-600"],
-html.light [class*="bg-purple-600"] * {
+/* Rich vibrant color contrast in Light mode */
+html:not(.dark) .text-emerald-300,
+html:not(.dark) .text-emerald-400,
+html.light .text-emerald-300,
+html.light .text-emerald-400 {
+  color: #059669 !important;
+}
+
+html:not(.dark) .text-rose-300,
+html:not(.dark) .text-rose-400,
+html.light .text-rose-300,
+html.light .text-rose-400 {
+  color: #e11d48 !important;
+}
+
+html:not(.dark) .text-blue-200,
+html:not(.dark) .text-blue-300,
+html.light .text-blue-200,
+html.light .text-blue-300 {
+  color: #1d4ed8 !important;
+}
+
+html:not(.dark) .text-purple-300,
+html:not(.dark) .text-purple-400,
+html.light .text-purple-300,
+html.light .text-purple-400 {
+  color: #7c3aed !important;
+}
+
+/* Solid action buttons & badges preserve white text */
+html:not(.dark) button[class*="bg-blue-600"],
+html:not(.dark) button[class*="bg-blue-600"] *,
+html.light button[class*="bg-blue-600"],
+html.light button[class*="bg-blue-600"] *,
+html:not(.dark) button[class*="bg-emerald-600"],
+html:not(.dark) button[class*="bg-emerald-600"] *,
+html.light button[class*="bg-emerald-600"],
+html.light button[class*="bg-emerald-600"] *,
+html:not(.dark) button[class*="bg-rose-600"],
+html:not(.dark) button[class*="bg-rose-600"] *,
+html.light button[class*="bg-rose-600"],
+html.light button[class*="bg-rose-600"] *,
+html:not(.dark) span[class*="bg-blue-600"],
+html.light span[class*="bg-blue-600"],
+html:not(.dark) span[class*="bg-blue-500"],
+html.light span[class*="bg-blue-500"],
+html:not(.dark) button.bg-blue-600,
+html.light button.bg-blue-600 {
   color: #ffffff !important;
 }
 
@@ -156,12 +169,6 @@ html.light textarea {
 html:not(.dark) input::placeholder,
 html.light input::placeholder {
   color: #94a3b8 !important;
-}
-
-/* Table rows hover */
-html:not(.dark) .hover\:bg-terminal-800\/40:hover,
-html.light .hover\:bg-terminal-800\/40:hover {
-  background-color: #f1f5f9 !important;
 }
 
 /* Custom scrollbars */
