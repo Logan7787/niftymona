@@ -3,11 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "description": "NIFTY 50 ATM Strike Analysis & Live Market Monitoring Web Application",
+  "type": "module",
   "workspaces": [
     "apps/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspaces --if-present",
+    "dev": "node scripts/dev.js",
     "dev:web": "npm run dev --workspace=@nifty-atm/web",
     "dev:server": "npm run dev --workspace=@nifty-atm/server",
     "build": "npm run build --workspaces --if-present",
