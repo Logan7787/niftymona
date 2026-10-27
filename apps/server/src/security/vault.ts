@@ -129,3 +129,54 @@ export function redactSecrets(obj: any): any {
   }
   return sanitized;
 }
+
+import fs from 'fs';
+import path from 'path';
+
+const VAULT_FILE_PATH = path.resolve(process.cwd(), '.credentials_vault.json');
+
+/**
+ * Saves in-memory vault map safely to encrypted local file.
+ */
+export function saveVaultToDisk(vaultMap: Map<string, Map<string, any>>): void {
+  try {
+    const rawObj: Record<string, Record<string, any>> = {};
+    for (const [userId, brokers] of vaultMap.entries()) {
+      rawObj[userId] = {};
+      for (const [broker, creds] of brokers.entries()) {
+        rawObj[userId][broker] = creds;
+      }
+    }
+    const encryptedData = encryptCredentials(rawObj);
+    fs.writeFileSync(VAULT_FILE_PATH, JSON.stringify({ vault: encryptedData }), 'utf-8');
+  } catch (err: any) {
+    console.warn('[Vault] Failed to save vault to disk:', err.message);
+  }
+}
+
+/**
+ * Loads vault map from encrypted local disk on boot.
+ */
+export function loadVaultFromDisk(): Map<string, Map<string, any>> {
+  const vaultMap = new Map<string, Map<string, any>>();
+  try {
+    if (fs.existsSync(VAULT_FILE_PATH)) {
+      const fileContent = fs.readFileSync(VAULT_FILE_PATH, 'utf-8');
+      const parsed = JSON.parse(fileContent);
+      if (parsed.vault) {
+        const rawObj = decryptCredentials<Record<string, Record<string, any>>>(parsed.vault);
+        for (const [userId, brokers] of Object.entries(rawObj)) {
+          const brokerMap = new Map<string, any>();
+          for (const [b, c] of Object.entries(brokers)) {
+            brokerMap.set(b, c);
+          }
+          vaultMap.set(userId, brokerMap);
+        }
+        console.log(`[Vault] Loaded persisted credentials for ${vaultMap.size} user account(s).`);
+      }
+    }
+  } catch (err: any) {
+    console.warn('[Vault] Failed to load persisted vault (will start clean):', err.message);
+  }
+  return vaultMap;
+}

@@ -31,6 +31,8 @@ export class MarketDataService {
   private spotHigh: number = 24470.20;
   private spotLow: number = 24340.50;
   private spotPrevClose: number = 24360.00;
+  private spotChange: number = 0;
+  private spotChangePercent: number = 0;
   private spotVolume: number = 4500000;
   private selectedExpiry: string = '';
   private currentAtmStrike: number = 24450;
@@ -103,9 +105,10 @@ export class MarketDataService {
     if (insts && insts.length > 0) {
       this.instrumentService.loadInstruments(insts);
       const expiries = this.instrumentService.getAvailableExpiries();
-      if (expiries.length > 0 && !this.selectedExpiry) {
+      if (expiries.length > 0) {
         this.selectedExpiry = expiries[0];
       }
+      this.subscribeActiveStrikes();
     }
 
     this.broadcastStatus();
@@ -140,13 +143,44 @@ export class MarketDataService {
 
   public setExpiry(expiry: string): void {
     this.selectedExpiry = expiry;
+    this.subscribeActiveStrikes();
     this.broadcastOptionChain();
   }
 
+  public subscribeActiveStrikes(): void {
+    const exp = this.selectedExpiry || this.instrumentService.getAvailableExpiries()[0];
+    const availableStrikes = this.instrumentService.getStrikesForExpiry(exp);
+    const atm = InstrumentService.calculateATMStrike(this.currentSpotPrice, availableStrikes);
+    this.currentAtmStrike = atm;
+    const strikesWindow = InstrumentService.getSelectedStrikesWindow(atm, availableStrikes, 10);
+
+    const tokensToSub: string[] = ['NSE_INDEX|Nifty 50'];
+    for (const s of strikesWindow) {
+      const ce = this.instrumentService.findContract(s, 'CE', exp);
+      const pe = this.instrumentService.findContract(s, 'PE', exp);
+      if (ce?.token) tokensToSub.push(ce.token);
+      if (pe?.token) tokensToSub.push(pe.token);
+    }
+
+    if (tokensToSub.length > 0) {
+      this.adapter.subscribe(tokensToSub);
+    }
+  }
+
   public getUnderlyingSnapshot(): UnderlyingSnapshot {
-    const change = Number((this.currentSpotPrice - this.spotPrevClose).toFixed(2));
-    const changePercent = Number(((change / this.spotPrevClose) * 100).toFixed(2));
+    const change = this.spotChange !== 0 ? this.spotChange : Number((this.currentSpotPrice - this.spotPrevClose).toFixed(2));
+    const changePercent = this.spotChangePercent !== 0 
+      ? this.spotChangePercent 
+      : (this.spotPrevClose > 0 ? Number(((change / this.spotPrevClose) * 100).toFixed(2)) : 0);
     const expiries = this.instrumentService.getAvailableExpiries();
+    const activeExpiry = expiries.length > 0
+      ? (expiries.includes(this.selectedExpiry) ? this.selectedExpiry : expiries[0])
+      : (this.selectedExpiry || '2026-10-27');
+
+    const availableStrikes = this.instrumentService.getStrikesForExpiry(activeExpiry);
+    const atmStrike = InstrumentService.calculateATMStrike(this.currentSpotPrice, availableStrikes);
+    this.currentAtmStrike = atmStrike;
+    this.selectedExpiry = activeExpiry;
     
     // Determine market status: NSE Trading Hours 09:15 to 15:30 IST
     const now = new Date();
@@ -173,9 +207,9 @@ export class MarketDataService {
       high: this.spotHigh,
       low: this.spotLow,
       prevClose: this.spotPrevClose,
-      atmStrike: this.currentAtmStrike,
-      nearestExpiry: this.selectedExpiry || expiries[0] || '2026-10-29',
-      availableExpiries: expiries.length > 0 ? expiries : [this.selectedExpiry || '2026-10-29'],
+      atmStrike,
+      nearestExpiry: activeExpiry,
+      availableExpiries: expiries.length > 0 ? expiries : [activeExpiry],
       indiaVix: 13.82,
       marketStatus,
       lastUpdate: this.lastTickTime,
@@ -327,10 +361,16 @@ export class MarketDataService {
   }
 
   private findContractTick(strike: number, type: 'CE' | 'PE', expiry: string): NormalizedMarketTick | undefined {
+    // 1. Direct match by strike, type, expiry
     for (const tick of this.ticksMap.values()) {
       if (tick.strike === strike && tick.optionType === type) {
         if (!tick.expiry || tick.expiry === expiry) return tick;
       }
+    }
+    // 2. Lookup via instrument token
+    const contract = this.instrumentService.findContract(strike, type, expiry);
+    if (contract && this.ticksMap.has(contract.token)) {
+      return this.ticksMap.get(contract.token);
     }
     return undefined;
   }
@@ -350,17 +390,29 @@ export class MarketDataService {
     this.lastTickTime = tick.receivedTimestamp;
     this.ticksMap.set(tick.instrumentKey, tick);
 
-    // If spot tick
-    if (tick.instrumentType === 'INDEX' || tick.tradingSymbol === 'NIFTY 50') {
+    // If spot index tick
+    if (tick.instrumentType === 'INDEX' || tick.tradingSymbol === 'NIFTY 50' || tick.instrumentKey.includes('NSE_INDEX')) {
+      const prevAtm = this.currentAtmStrike;
       this.currentSpotPrice = tick.ltp;
       if (tick.open) this.spotOpen = tick.open;
       if (tick.high) this.spotHigh = tick.high;
       if (tick.low) this.spotLow = tick.low;
       if (tick.prevClose) this.spotPrevClose = tick.prevClose;
+      if (tick.priceChange !== undefined) this.spotChange = tick.priceChange;
+      if (tick.changePercent !== undefined) this.spotChangePercent = tick.changePercent;
       if (tick.volume) this.spotVolume = tick.volume;
+
+      const exp = this.selectedExpiry || this.instrumentService.getAvailableExpiries()[0];
+      const availableStrikes = this.instrumentService.getStrikesForExpiry(exp);
+      const newAtm = InstrumentService.calculateATMStrike(tick.ltp, availableStrikes);
+      if (newAtm !== prevAtm && newAtm > 0) {
+        this.currentAtmStrike = newAtm;
+        this.subscribeActiveStrikes();
+      }
 
       this.updateSpotCandle(tick.ltp);
       this.recalculateIndicators();
+      this.broadcastOptionChain();
     }
 
     // Mark to market paper trading portfolio

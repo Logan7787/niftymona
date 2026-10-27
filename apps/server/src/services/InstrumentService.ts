@@ -207,6 +207,25 @@ export class InstrumentService {
     return this.instruments.get(token);
   }
 
+  public findContract(strike: number, type: 'CE' | 'PE', expiry: string): ListedInstrument | undefined {
+    for (const inst of this.instruments.values()) {
+      if (inst.strike === strike && inst.instrumentType === type && (!expiry || inst.expiry === expiry)) {
+        return inst;
+      }
+    }
+    return undefined;
+  }
+
+  public getAllContractsForExpiry(expiry: string): ListedInstrument[] {
+    const list: ListedInstrument[] = [];
+    for (const inst of this.instruments.values()) {
+      if (inst.expiry === expiry) {
+        list.push(inst);
+      }
+    }
+    return list;
+  }
+
   /**
    * Returns current lot size for NIFTY contracts. Reads from metadata,
    * with current exchange default fallback (25 / 75 as per regulatory changes).

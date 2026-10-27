@@ -13,3 +13,5 @@ Thumbs.db
 coverage/
 .turbo
 scratch/
+.credentials_vault.json
+*.enc

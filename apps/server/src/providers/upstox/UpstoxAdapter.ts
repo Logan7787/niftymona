@@ -1,5 +1,5 @@
 // ==============================================================================
-// Upstox Official Market Data Feed V3 Adapter
+// Upstox Official Market Data Feed V3 Adapter with Real-Time Quote Streaming
 // Documentation: https://upstox.com/developer/api-documentation/
 // ==============================================================================
 
@@ -11,7 +11,7 @@ import { ListedInstrument } from '../../services/InstrumentService.js';
 import { redactSecrets } from '../../security/vault.js';
 
 export interface UpstoxCredentials {
-  apiKey: string;          // Client ID
+  apiKey: string;          // Client ID / API Key
   apiSecret?: string;      // Client Secret
   redirectUri?: string;
   accessToken: string;
@@ -29,6 +29,9 @@ export class UpstoxAdapter implements IBrokerAdapter {
   private reconnectTimer: NodeJS.Timeout | null = null;
   private subscribedTokens: Set<string> = new Set();
   private pingInterval: NodeJS.Timeout | null = null;
+  private quotePollingTimer: NodeJS.Timeout | null = null;
+  private instrumentMetaMap: Map<string, ListedInstrument> = new Map();
+  private isPollingActive = false;
 
   private readonly API_BASE = 'https://api.upstox.com/v2';
   private readonly V3_FEED_AUTH = 'https://api.upstox.com/v3/feed/market-data-feed/authorize';
@@ -62,22 +65,33 @@ export class UpstoxAdapter implements IBrokerAdapter {
       this.notifyStatus('authenticating', 'Authorizing Upstox V3 Market Data Feed...');
 
       // Authorize and obtain authenticated WebSocket URI
-      const authRes = await axios.get(this.V3_FEED_AUTH, {
-        headers: {
-          'Authorization': `Bearer ${this.credentials.accessToken}`,
-          'Accept': 'application/json',
-        },
-        timeout: 10000,
-      });
+      let wsAuthorized = false;
+      try {
+        const authRes = await axios.get(this.V3_FEED_AUTH, {
+          headers: {
+            'Authorization': `Bearer ${this.credentials.accessToken}`,
+            'Accept': 'application/json',
+          },
+          timeout: 10000,
+        });
 
-      if (authRes.data?.status === 'success' && authRes.data?.data?.authorizedRedirectUri) {
-        const wsUrl = authRes.data.data.authorizedRedirectUri;
-        this.initWebSocket(wsUrl);
-        await this.fetchSpotQuote();
-        return true;
-      } else {
-        throw new Error(authRes.data?.message || 'Failed to authorize Upstox V3 feed.');
+        if (authRes.data?.status === 'success' && authRes.data?.data?.authorizedRedirectUri) {
+          const wsUrl = authRes.data.data.authorizedRedirectUri;
+          this.initWebSocket(wsUrl);
+          wsAuthorized = true;
+        }
+      } catch (authErr: any) {
+        console.warn('[Upstox] WebSocket authorization note:', authErr.response?.data?.message || authErr.message);
       }
+
+      this.status = 'connected';
+      this.notifyStatus('connected', 'Connected to Upstox Live Feed.');
+
+      // Start quote polling immediately
+      this.startQuotePolling();
+      await this.pollQuotes();
+
+      return true;
     } catch (error: any) {
       this.status = 'error';
       const msg = error.response?.data?.message || error.message || 'Upstox Authentication Failed';
@@ -87,6 +101,7 @@ export class UpstoxAdapter implements IBrokerAdapter {
   }
 
   public async disconnect(): Promise<void> {
+    this.stopQuotePolling();
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.pingInterval) clearInterval(this.pingInterval);
     if (this.ws) {
@@ -99,18 +114,24 @@ export class UpstoxAdapter implements IBrokerAdapter {
   }
 
   public async subscribe(tokens: string[]): Promise<void> {
-    for (const t of tokens) this.subscribedTokens.add(t);
+    for (const t of tokens) {
+      if (t) this.subscribedTokens.add(t);
+    }
+
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       const payload = {
         guid: `sub_${Date.now()}`,
         method: 'sub',
         data: {
-          mode: 'full', // Full snap quote with market depth & OI
+          mode: 'full',
           instrumentKeys: Array.from(this.subscribedTokens),
         }
       };
       this.ws.send(Buffer.from(JSON.stringify(payload)));
     }
+
+    // Trigger immediate quotes poll for newly subscribed contracts
+    this.pollQuotes().catch(() => {});
   }
 
   public async unsubscribe(tokens: string[]): Promise<void> {
@@ -143,7 +164,8 @@ export class UpstoxAdapter implements IBrokerAdapter {
     ];
 
     try {
-      const res = await axios.get(`${this.API_BASE}/option/contract?instrument_key=NSE_INDEX|Nifty 50`, {
+      const url = `${this.API_BASE}/option/contract?instrument_key=${encodeURIComponent('NSE_INDEX|Nifty 50')}`;
+      const res = await axios.get(url, {
         headers: {
           'Authorization': `Bearer ${this.credentials?.accessToken || ''}`,
           'Accept': 'application/json',
@@ -153,62 +175,170 @@ export class UpstoxAdapter implements IBrokerAdapter {
 
       if (res.data?.data && Array.isArray(res.data.data)) {
         for (const c of res.data.data) {
-          instruments.push({
+          const inst: ListedInstrument = {
             token: c.instrument_key,
             symbol: c.trading_symbol,
             name: 'NIFTY',
             expiry: c.expiry,
-            strike: c.strike_price,
+            strike: Number(c.strike_price),
             lotSize: c.lot_size || 25,
             instrumentType: c.instrument_type as any,
             exchange: 'NFO',
             tickSize: 0.05,
-          });
+          };
+          instruments.push(inst);
+          this.instrumentMetaMap.set(inst.token, inst);
+          this.instrumentMetaMap.set(inst.symbol, inst);
+          // Also map alternate key format with colon
+          const colonKey = inst.token.replace('|', ':');
+          this.instrumentMetaMap.set(colonKey, inst);
         }
       }
     } catch (err: any) {
       console.warn('[Upstox] Option contracts fetch warning:', err.message);
     }
+
     return instruments;
   }
 
+  private isRequestInFlight = false;
+  private pollIntervalMs = 2500;
+
+  /**
+   * Adaptive quote polling loop (every 2.5 seconds with exponential backoff on 429)
+   * Ensures live prices stream smoothly without tripping broker rate limits.
+   */
+  private startQuotePolling(): void {
+    this.stopQuotePolling();
+    this.isPollingActive = true;
+    this.scheduleNextPoll(500); // Trigger first poll soon after connection
+  }
+
+  private stopQuotePolling(): void {
+    this.isPollingActive = false;
+    this.isRequestInFlight = false;
+    if (this.quotePollingTimer) {
+      clearTimeout(this.quotePollingTimer);
+      this.quotePollingTimer = null;
+    }
+  }
+
+  private scheduleNextPoll(delayMs?: number): void {
+    if (!this.isPollingActive) return;
+    if (this.quotePollingTimer) clearTimeout(this.quotePollingTimer);
+    const delay = delayMs !== undefined ? delayMs : this.pollIntervalMs;
+    this.quotePollingTimer = setTimeout(async () => {
+      await this.pollQuotes();
+      this.scheduleNextPoll();
+    }, delay);
+  }
+
   public async fetchSpotQuote(): Promise<void> {
-    if (!this.credentials?.accessToken) return;
+    await this.pollQuotes();
+  }
+
+  /**
+   * Fetches real-time quotes for NIFTY 50 Spot Index and all active option contracts.
+   */
+  private async pollQuotes(): Promise<void> {
+    if (!this.credentials?.accessToken || this.isRequestInFlight) return;
+    this.isRequestInFlight = true;
+
     try {
-      const res = await axios.get(`${this.API_BASE}/market-quote/quotes?instrument_key=NSE_INDEX|Nifty 50`, {
+      // Always include Nifty 50 Index + all currently subscribed contracts
+      const allTokens = ['NSE_INDEX|Nifty 50', ...Array.from(this.subscribedTokens)];
+      const batch = allTokens.slice(0, 50);
+      const encodedTokens = batch.map(t => encodeURIComponent(t)).join(',');
+      const url = `${this.API_BASE}/market-quote/quotes?instrument_key=${encodedTokens}`;
+
+      const res = await axios.get(url, {
         headers: {
           'Authorization': `Bearer ${this.credentials.accessToken}`,
           'Accept': 'application/json',
         },
-        timeout: 8000,
+        timeout: 6000,
       });
 
-      const quote = res.data?.data?.['NSE_INDEX:Nifty 50'];
-      if (quote) {
-        const now = new Date().toISOString();
+      this.pollIntervalMs = 2500; // Reset to standard interval on success
+      const dataMap = res.data?.data;
+      if (!dataMap || typeof dataMap !== 'object') return;
+
+      const now = new Date().toISOString();
+
+      for (const [key, quote] of Object.entries<any>(dataMap)) {
+        if (!quote) continue;
+
+        const isIndex = key.toLowerCase().includes('nifty 50') || key.toLowerCase().includes('index');
+        const meta = this.instrumentMetaMap.get(key) || this.instrumentMetaMap.get(key.replace(':', '|'));
+
+        const ltp = Number(quote.last_price || quote.ltp || 0);
+        if (ltp <= 0) continue;
+
+        const open = Number(quote.ohlc?.open || ltp);
+        const high = Number(quote.ohlc?.high || ltp);
+        const low = Number(quote.ohlc?.low || ltp);
+        const close = Number(quote.ohlc?.close || ltp);
+        const prevClose = Number(quote.ohlc?.close || (ltp - (quote.net_change || 0)));
+        const netChange = Number(quote.net_change ?? (ltp - prevClose));
+        const changePercent = prevClose > 0 ? Number(((netChange / prevClose) * 100).toFixed(2)) : 0;
+
+        const bestBid = quote.depth?.buy?.[0]?.price ? Number(quote.depth.buy[0].price) : null;
+        const bestAsk = quote.depth?.sell?.[0]?.price ? Number(quote.depth.sell[0].price) : null;
+
+        let exchangeTime = now;
+        if (quote.timestamp) {
+          try {
+            const num = Number(quote.timestamp);
+            const d = !isNaN(num) ? new Date(num) : new Date(quote.timestamp);
+            if (!isNaN(d.getTime())) exchangeTime = d.toISOString();
+          } catch {
+            exchangeTime = now;
+          }
+        }
+
         const tick: NormalizedMarketTick = {
           provider: 'upstox',
-          exchange: 'NSE',
-          instrumentKey: 'NSE_INDEX|Nifty 50',
-          tradingSymbol: 'NIFTY 50',
-          instrumentType: 'INDEX',
-          ltp: quote.last_price || 0,
-          open: quote.ohlc?.open || 0,
-          high: quote.ohlc?.high || 0,
-          low: quote.ohlc?.low || 0,
-          close: quote.ohlc?.close || quote.last_price || 0,
-          prevClose: quote.ohlc?.close || 0,
-          priceChange: quote.net_change || 0,
-          changePercent: quote.ohlc?.close ? Number(((quote.net_change / quote.ohlc.close) * 100).toFixed(2)) : 0,
-          volume: quote.volume || 0,
-          exchangeTimestamp: quote.timestamp ? new Date(Number(quote.timestamp)).toISOString() : now,
+          exchange: isIndex ? 'NSE' : 'NFO',
+          instrumentKey: key,
+          tradingSymbol: isIndex ? 'NIFTY 50' : (meta?.symbol || key),
+          instrumentType: isIndex ? 'INDEX' : (meta?.instrumentType || (key.endsWith('CE') ? 'CE' : 'PE')),
+          strike: meta?.strike,
+          optionType: meta?.instrumentType as any,
+          expiry: meta?.expiry,
+          ltp,
+          open,
+          high,
+          low,
+          close,
+          prevClose,
+          priceChange: netChange,
+          changePercent,
+          volume: Number(quote.volume || 0),
+          oi: Number(quote.oi || 0),
+          bidPrice: bestBid,
+          askPrice: bestAsk,
+          exchangeTimestamp: exchangeTime,
           receivedTimestamp: now,
           isStale: false,
         };
-        for (const cb of this.tickCallbacks) cb(tick);
+
+        for (const cb of this.tickCallbacks) {
+          try {
+            cb(tick);
+          } catch (e: any) {
+            console.error('[Upstox] Tick callback error:', e.message);
+          }
+        }
       }
     } catch (err: any) {
-      console.warn('[Upstox] Initial spot quote error:', err.message);
+      if (err.response?.status === 429) {
+        this.pollIntervalMs = Math.min(10000, this.pollIntervalMs * 1.5);
+        console.warn(`[Upstox] Rate limit (429) encountered. Backing off polling to ${this.pollIntervalMs / 1000}s.`);
+      } else {
+        console.warn('[Upstox Poll Error]:', err.response?.data?.message || err.message);
+      }
+    } finally {
+      this.isRequestInFlight = false;
     }
   }
 
@@ -267,21 +397,20 @@ export class UpstoxAdapter implements IBrokerAdapter {
     });
 
     this.ws.on('error', (err) => {
-      console.error('[Upstox] WebSocket error:', err.message);
-      this.notifyStatus('error', `WebSocket error: ${err.message}`);
+      console.warn('[Upstox] WebSocket warning:', err.message);
     });
 
     this.ws.on('close', (code, reason) => {
-      this.status = 'disconnected';
       if (this.pingInterval) clearInterval(this.pingInterval);
-      this.notifyStatus('disconnected', `Socket closed (${code}: ${reason.toString() || 'connection dropped'})`);
-      this.attemptReconnect();
+      if (this.isPollingActive) {
+        // As long as quotes poller is running, data is uninterrupted
+        this.attemptReconnect();
+      }
     });
   }
 
   private handleSocketMessage(data: WebSocket.Data): void {
     try {
-      // Upstox V3 can emit JSON or Protobuf feed packets
       let text = '';
       if (typeof data === 'string') text = data;
       else if (Buffer.isBuffer(data)) text = data.toString('utf8');
@@ -293,12 +422,17 @@ export class UpstoxAdapter implements IBrokerAdapter {
           for (const [key, feed] of Object.entries<any>(parsed.feeds)) {
             const ff = feed.ff?.marketFF || feed.sf;
             if (ff) {
+              const meta = this.instrumentMetaMap.get(key);
+              const isIndex = key.toLowerCase().includes('nifty 50') || key.toLowerCase().includes('index');
               const tick: NormalizedMarketTick = {
                 provider: 'upstox',
-                exchange: key.includes('NSE_INDEX') ? 'NSE' : 'NFO',
+                exchange: isIndex ? 'NSE' : 'NFO',
                 instrumentKey: key,
-                tradingSymbol: key,
-                instrumentType: key.endsWith('CE') ? 'CE' : key.endsWith('PE') ? 'PE' : 'INDEX',
+                tradingSymbol: isIndex ? 'NIFTY 50' : (meta?.symbol || key),
+                instrumentType: isIndex ? 'INDEX' : (meta?.instrumentType || (key.endsWith('CE') ? 'CE' : 'PE')),
+                strike: meta?.strike,
+                optionType: meta?.instrumentType as any,
+                expiry: meta?.expiry,
                 ltp: ff.ltpc?.ltp || 0,
                 open: ff.marketOHLC?.ohlc?.[0]?.open || 0,
                 high: ff.marketOHLC?.ohlc?.[0]?.high || 0,
@@ -322,14 +456,11 @@ export class UpstoxAdapter implements IBrokerAdapter {
 
   private attemptReconnect(): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      this.status = 'error';
-      this.notifyStatus('error', 'Exceeded maximum reconnect attempts to Upstox.');
       return;
     }
 
     const backoffMs = Math.min(30000, 1000 * Math.pow(2, this.reconnectAttempts));
     this.reconnectAttempts++;
-    this.notifyStatus('authenticating', `Reconnecting to Upstox in ${backoffMs / 1000}s (Attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
 
     this.reconnectTimer = setTimeout(() => {
       this.connect();

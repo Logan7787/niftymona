@@ -8,7 +8,7 @@ import { z } from 'zod';
 import jwt from 'jsonwebtoken';
 import { MarketDataService } from './services/MarketDataService.js';
 import { PaperTradingService } from './paper-trading/PaperTradingService.js';
-import { encryptCredentials, decryptCredentials, maskString, redactSecrets } from './security/vault.js';
+import { encryptCredentials, decryptCredentials, maskString, redactSecrets, saveVaultToDisk, loadVaultFromDisk } from './security/vault.js';
 import { BrokerCredentialMasked, BrokerProvider } from './types/market.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'nifty-atm-jwt-secret-vault-2026';
@@ -27,9 +27,25 @@ export function createApp(
 
   app.use(express.json());
 
-  // In-memory demo vault & users for instant local testing without remote Supabase dependencies
+  // Load persistent encrypted vault from disk so tokens survive server restarts
   const userVault = new Map<string, any>();
-  const credentialsVault = new Map<string, Map<BrokerProvider, { encrypted: string; masked: BrokerCredentialMasked }>>();
+  const credentialsVault: Map<string, Map<BrokerProvider, { encrypted: string; masked: BrokerCredentialMasked }>> = loadVaultFromDisk();
+
+  // If Upstox or Angel One credentials were saved previously, attempt automatic reconnection
+  for (const [_uid, brokers] of credentialsVault.entries()) {
+    if (brokers.has('upstox')) {
+      try {
+        const creds = decryptCredentials(brokers.get('upstox')!.encrypted);
+        if (creds?.accessToken) {
+          console.log('[Broker] Auto-connecting saved Upstox session from secure vault...');
+          marketDataService.setProvider('upstox', creds);
+          break;
+        }
+      } catch (err: any) {
+        console.warn('[Broker] Could not auto-connect Upstox:', err.message);
+      }
+    }
+  }
 
   // Helper auth middleware
   const authMiddleware = (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -245,6 +261,7 @@ export function createApp(
 
     if (!credentialsVault.has(userId)) credentialsVault.set(userId, new Map());
     credentialsVault.get(userId)!.set('angelone', { encrypted, masked });
+    saveVaultToDisk(credentialsVault);
 
     res.json({
       success: connected,
@@ -257,7 +274,7 @@ export function createApp(
 
   app.post('/api/brokers/upstox/credentials', authMiddleware, async (req, res) => {
     const schema = z.object({
-      apiKey: z.string().min(1, 'API Key / Client ID is required'),
+      apiKey: z.string().optional().default('upstox_api_client'),
       apiSecret: z.string().optional(),
       accessToken: z.string().min(1, 'Access Token is required'),
     });
@@ -268,26 +285,32 @@ export function createApp(
     }
 
     const userId = (req as any).user.id;
-    const encrypted = encryptCredentials(parsed.data);
+    const credsData = {
+      apiKey: parsed.data.apiKey || 'upstox_api_client',
+      apiSecret: parsed.data.apiSecret || '',
+      accessToken: parsed.data.accessToken.trim(),
+    };
+    const encrypted = encryptCredentials(credsData);
 
     // Immediately connect to Upstox and switch live provider
-    const connected = await marketDataService.setProvider('upstox', parsed.data);
+    const connected = await marketDataService.setProvider('upstox', credsData);
 
     const masked: BrokerCredentialMasked = {
       provider: 'upstox',
-      clientCode: maskString(parsed.data.apiKey, 3, 3),
-      apiKey: maskString(parsed.data.apiKey, 3, 3),
+      clientCode: maskString(credsData.apiKey, 3, 3),
+      apiKey: maskString(credsData.apiKey, 3, 3),
       status: connected ? 'connected' : 'error',
       isActive: connected,
     };
 
     if (!credentialsVault.has(userId)) credentialsVault.set(userId, new Map());
     credentialsVault.get(userId)!.set('upstox', { encrypted, masked });
+    saveVaultToDisk(credentialsVault);
 
     res.json({
       success: connected,
       message: connected 
-        ? 'Connected to Upstox V3 Live Market Feed! Live exchange ticks active.'
+        ? 'Connected to Upstox Live Market Feed! Live exchange ticks active.'
         : 'Upstox credentials saved, but connection failed. Please check that your access token is valid and not expired.',
       credentials: masked,
     });
@@ -297,6 +320,7 @@ export function createApp(
     const userId = (req as any).user.id;
     const provider = req.params.provider as BrokerProvider;
     credentialsVault.get(userId)?.delete(provider);
+    saveVaultToDisk(credentialsVault);
     res.json({ success: true, message: `${provider} credentials removed from vault.` });
   });
 
