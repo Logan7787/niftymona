@@ -14,6 +14,7 @@ import {
   InstrumentService, IndicatorService, SignalService, 
   PaperTradingService, ListedInstrument 
 } from './marketEngine';
+import { generateTOTP } from './totp';
 
 export interface UpstoxStoredCreds {
   apiKey: string;
@@ -120,8 +121,12 @@ class BrokerService {
     try {
       const savedProvider = localStorage.getItem('nifty_active_provider') as BrokerProvider;
       const upstoxCreds = this.getUpstoxCredentials();
+      const angelCreds = this.getAngelOneCredentials();
+
       if (savedProvider === 'upstox' && upstoxCreds?.accessToken) {
         this.connectUpstox(upstoxCreds);
+      } else if (savedProvider === 'angelone' && angelCreds?.apiKey && angelCreds?.clientCode) {
+        this.connectAngelOne(angelCreds);
       } else {
         this.startMockFeed();
       }
@@ -329,6 +334,212 @@ class BrokerService {
         this.statusMessage = 'Upstox Access Token has expired. Please update it in Broker Settings.';
       } else if (err.response?.status === 429) {
         console.warn('[Upstox] Rate limit hit. Backing off...');
+      }
+    } finally {
+      this.isRequestInFlight = false;
+    }
+  }
+
+  // ----------------------------------------------------------------------------
+  // Angel One SmartAPI Live Feed Connection
+  // ----------------------------------------------------------------------------
+  public async connectAngelOne(creds: AngelOneStoredCreds): Promise<{ success: boolean; message: string }> {
+    this.stopPolling();
+    this.activeProvider = 'angelone';
+    this.connectionStatus = 'authenticating';
+    this.statusMessage = 'Connecting to Angel One SmartAPI...';
+    this.saveAngelOneCredentials(creds);
+    localStorage.setItem('nifty_active_provider', 'angelone');
+    this.notifyListeners();
+
+    try {
+      if (!creds.apiKey || !creds.clientCode) {
+        throw new Error('Angel One SmartAPI Key and Client Code are required.');
+      }
+
+      // If jwtToken is not available, perform session login
+      if (!creds.jwtToken) {
+        if (!creds.password || !creds.totp) {
+          throw new Error('Please enter Account Password & TOTP (or a direct JWT session token) for Angel One.');
+        }
+
+        const totpCode = await generateTOTP(creds.totp);
+        const loginUrl = '/api/angelone/rest/auth/angelbroking/user/v1/loginByPassword';
+        const loginRes = await axios.post(
+          loginUrl,
+          {
+            clientcode: creds.clientCode,
+            password: creds.password,
+            totp: totpCode,
+          },
+          {
+            headers: {
+              'X-PrivateKey': creds.apiKey,
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'X-SourceID': 'WEB',
+              'X-ClientLocalIP': '127.0.0.1',
+              'X-ClientPublicIP': '127.0.0.1',
+              'X-MACAddress': 'fe80::1',
+              'X-UserType': 'USER',
+            },
+            timeout: 10000,
+          }
+        );
+
+        if (loginRes.data?.status === true && loginRes.data?.data) {
+          creds.jwtToken = loginRes.data.data.jwtToken;
+          creds.feedToken = loginRes.data.data.feedToken;
+          this.saveAngelOneCredentials(creds);
+        } else {
+          const errMsg = loginRes.data?.message || 'Login failed with Angel One credentials.';
+          throw new Error(errMsg);
+        }
+      }
+
+      // Initialize NIFTY instruments with weekly expiry
+      const today = new Date();
+      const dayOfWeek = today.getDay();
+      const daysUntilThursday = (4 - dayOfWeek + 7) % 7 || 7;
+      const expiryDate = new Date(today);
+      expiryDate.setDate(today.getDate() + daysUntilThursday);
+      const weeklyExpiry = expiryDate.toISOString().split('T')[0];
+
+      const instruments: ListedInstrument[] = [
+        {
+          token: '26000',
+          symbol: 'NIFTY 50',
+          name: 'NIFTY',
+          expiry: '',
+          strike: 0,
+          lotSize: 65,
+          instrumentType: 'INDEX',
+          exchange: 'NSE',
+          tickSize: 0.05,
+        }
+      ];
+
+      const baseStrike = Math.round((this.spotPrice || 22700) / 50) * 50;
+      for (let s = baseStrike - 600; s <= baseStrike + 600; s += 50) {
+        instruments.push(
+          { token: `ANGEL_${s}_CE`, symbol: `NIFTY ${s} CE`, name: 'NIFTY', expiry: weeklyExpiry, strike: s, lotSize: 65, instrumentType: 'CE', exchange: 'NFO', tickSize: 0.05 },
+          { token: `ANGEL_${s}_PE`, symbol: `NIFTY ${s} PE`, name: 'NIFTY', expiry: weeklyExpiry, strike: s, lotSize: 65, instrumentType: 'PE', exchange: 'NFO', tickSize: 0.05 }
+        );
+      }
+
+      this.instrumentService.loadInstruments(instruments);
+      this.selectedExpiry = weeklyExpiry;
+
+      this.connectionStatus = 'connected';
+      this.statusMessage = 'Angel One SmartAPI Live Market Feed Connected.';
+      this.startAngelOnePolling(creds);
+      this.notifyListeners();
+
+      return { success: true, message: 'Connected to Angel One SmartAPI Live Feed!' };
+    } catch (err: any) {
+      this.connectionStatus = 'error';
+      const msg = err.response?.data?.message || err.message || 'Failed to connect to Angel One SmartAPI';
+      this.statusMessage = msg;
+      this.notifyListeners();
+      return { success: false, message: msg };
+    }
+  }
+
+  private startAngelOnePolling(creds: AngelOneStoredCreds): void {
+    this.stopPolling();
+    this.pollAngelOneQuotes(creds);
+
+    this.pollingTimer = setInterval(() => {
+      this.pollAngelOneQuotes(creds);
+    }, this.pollIntervalMs);
+  }
+
+  private async pollAngelOneQuotes(creds: AngelOneStoredCreds): Promise<void> {
+    if (this.isRequestInFlight) return;
+    this.isRequestInFlight = true;
+    const startMs = performance.now();
+
+    try {
+      const jwt = creds.jwtToken || '';
+      const authHeader = jwt.startsWith('Bearer ') ? jwt : `Bearer ${jwt}`;
+      const quoteUrl = '/api/angelone/rest/secure/angelbroking/market/v1/quote/';
+
+      const res = await axios.post(
+        quoteUrl,
+        {
+          mode: 'FULL',
+          exchangeTokens: {
+            NSE: ['26000']
+          }
+        },
+        {
+          headers: {
+            'Authorization': authHeader,
+            'X-PrivateKey': creds.apiKey,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-SourceID': 'WEB',
+            'X-ClientLocalIP': '127.0.0.1',
+            'X-ClientPublicIP': '127.0.0.1',
+            'X-MACAddress': 'fe80::1',
+            'X-UserType': 'USER',
+          },
+          timeout: 8000,
+        }
+      );
+
+      const items = res.data?.data?.fetched;
+      if (Array.isArray(items) && items.length > 0) {
+        const q = items[0];
+        const now = new Date().toISOString();
+        const ltp = Number(q.ltp || q.lastPrice || 0);
+
+        if (ltp > 0) {
+          const prevAtm = this.currentAtmStrike;
+          const open = Number(q.open || ltp);
+          const high = Number(q.high || ltp);
+          const low = Number(q.low || ltp);
+          const close = Number(q.close || ltp);
+          const prevClose = close;
+          const netChange = Number(q.netChange ?? (ltp - prevClose));
+          const changePercent = Number(q.percentChange ?? (prevClose > 0 ? (netChange / prevClose) * 100 : 0));
+
+          this.spotPrice = ltp;
+          this.spotOpen = open;
+          this.spotHigh = high;
+          this.spotLow = low;
+          this.spotPrevClose = prevClose;
+          this.spotChange = netChange;
+          this.spotChangePercent = Number(changePercent.toFixed(2));
+          this.lastUpdate = now;
+
+          const strikes = this.instrumentService.getStrikesForExpiry(this.selectedExpiry);
+          const newAtm = InstrumentService.calculateATMStrike(ltp, strikes);
+          if (newAtm !== prevAtm && newAtm > 0) {
+            this.currentAtmStrike = newAtm;
+          }
+
+          this.updateSpotCandle(ltp);
+          this.recalculateIndicators();
+
+          // Mark to market paper trading
+          const ltpMap = new Map<string, number>();
+          ltpMap.set('26000', ltp);
+          ltpMap.set('NIFTY 50', ltp);
+          this.paperTradingService.updateMarkToMarket(ltpMap);
+        }
+      }
+
+      this.connectionStatus = 'connected';
+      const latency = Math.round(performance.now() - startMs);
+      this.notifyListeners(latency);
+    } catch (err: any) {
+      if (err.response?.status === 401) {
+        this.connectionStatus = 'token_expired';
+        this.statusMessage = 'Angel One JWT session token expired. Please re-authenticate in Broker Settings.';
+        this.notifyListeners();
+      } else if (err.response?.status === 429) {
+        console.warn('[AngelOne] Rate limit hit. Backing off...');
       }
     } finally {
       this.isRequestInFlight = false;

@@ -139,7 +139,11 @@ export const api = {
       }
       return brokerService.connectUpstox(creds);
     } else if (provider === 'angelone') {
-      return { success: false, message: 'Angel One SmartAPI: Please enter API key & client code in Settings.' };
+      const creds = brokerService.getAngelOneCredentials();
+      if (!creds?.apiKey || !creds?.clientCode) {
+        return { success: false, activeProvider: 'angelone', status: 'error', message: 'Please enter your Angel One API Key & Client Code in Settings first.' };
+      }
+      return brokerService.connectAngelOne(creds);
     }
     return { success: true };
   },
@@ -149,8 +153,7 @@ export const api = {
   },
 
   async saveAngelOneCredentials(creds: AngelOneStoredCreds) {
-    brokerService.saveAngelOneCredentials(creds);
-    return { success: true, message: 'Angel One credentials saved in client storage.' };
+    return brokerService.connectAngelOne(creds);
   },
 
   async deleteBrokerCredentials(provider: BrokerProvider) {

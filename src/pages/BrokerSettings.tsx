@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrokerProvider } from '../types/market';
 import { api } from '../services/api';
+import { brokerService } from '../services/brokerService';
 import { 
   KeyRound, ShieldCheck, Check, AlertCircle, RefreshCw, 
   Trash2, ExternalLink, Zap, Lock, Eye, EyeOff 
@@ -26,6 +27,7 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
   const [angelClientCode, setAngelClientCode] = useState('');
   const [angelPassword, setAngelPassword] = useState('');
   const [angelTotp, setAngelTotp] = useState('');
+  const [angelJwtToken, setAngelJwtToken] = useState('');
   const [showAngelSecret, setShowAngelSecret] = useState(false);
 
   // Upstox form
@@ -45,6 +47,18 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
 
   useEffect(() => {
     fetchStatus();
+    const savedAngel = brokerService.getAngelOneCredentials();
+    if (savedAngel) {
+      if (savedAngel.clientCode) setAngelClientCode(savedAngel.clientCode);
+      if (savedAngel.apiKey) setAngelApiKey(savedAngel.apiKey);
+      if (savedAngel.jwtToken) setAngelJwtToken(savedAngel.jwtToken);
+    }
+    const savedUpstox = brokerService.getUpstoxCredentials();
+    if (savedUpstox) {
+      if (savedUpstox.apiKey && savedUpstox.apiKey !== 'upstox_client') setUpstoxApiKey(savedUpstox.apiKey);
+      if (savedUpstox.apiSecret) setUpstoxApiSecret(savedUpstox.apiSecret);
+      if (savedUpstox.accessToken) setUpstoxAccessToken(savedUpstox.accessToken);
+    }
   }, []);
 
   const handleSaveAngelOne = async (e: React.FormEvent) => {
@@ -52,21 +66,30 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
     setLoading(true);
     setMsg(null);
     try {
+      const stored = brokerService.getAngelOneCredentials();
+      const apiKey = angelApiKey.trim() || stored?.apiKey || '';
+      const clientCode = angelClientCode.trim() || stored?.clientCode || '';
+
+      if (!apiKey || !clientCode) {
+        setLoading(false);
+        setMsg({ type: 'error', text: 'Both SmartAPI Key and Client Code are required.' });
+        return;
+      }
+
       const res = await api.saveAngelOneCredentials({
-        apiKey: angelApiKey,
-        clientCode: angelClientCode,
-        password: angelPassword,
-        totp: angelTotp,
+        apiKey,
+        clientCode,
+        password: angelPassword.trim() || stored?.password,
+        totp: angelTotp.trim() || stored?.totp,
+        jwtToken: angelJwtToken.trim() || stored?.jwtToken,
       });
       setLoading(false);
       if (res.success) {
-        setMsg({ type: 'success', text: res.message });
-        setAngelPassword('');
-        setAngelTotp('');
+        setMsg({ type: 'success', text: res.message || 'Angel One credentials saved and feed activated!' });
         onSelectBroker('angelone');
         fetchStatus();
       } else {
-        setMsg({ type: 'error', text: (res as any).error || res.message || 'Failed to connect with Angel One credentials' });
+        setMsg({ type: 'error', text: res.message || 'Failed to connect with Angel One credentials' });
       }
     } catch (err: any) {
       setLoading(false);
@@ -102,13 +125,26 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
   const handleDeleteCredentials = async (provider: BrokerProvider) => {
     if (!window.confirm(`Delete encrypted ${provider} credentials from the vault?`)) return;
     await api.deleteBrokerCredentials(provider);
+    if (provider === 'angelone') {
+      setAngelApiKey('');
+      setAngelClientCode('');
+      setAngelPassword('');
+      setAngelTotp('');
+      setAngelJwtToken('');
+    }
     fetchStatus();
   };
 
   const handleSwitchProvider = async (provider: BrokerProvider) => {
     setLoading(true);
-    await api.selectBroker(provider);
-    onSelectBroker(provider);
+    setMsg(null);
+    const res = await api.selectBroker(provider);
+    if (res && !res.success) {
+      setMsg({ type: 'error', text: res.message || `Failed to activate ${provider}` });
+    } else if (res && res.success) {
+      setMsg({ type: 'success', text: res.message || `Switched to ${provider} market feed.` });
+      onSelectBroker(provider);
+    }
     setLoading(false);
     fetchStatus();
   };
@@ -192,6 +228,18 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
                 <span className="text-slate-400">API Key:</span>
                 <span className="text-white font-bold">{brokerData?.providers?.angelone?.apiKey || 'Not configured'}</span>
               </div>
+              <div className="flex justify-between py-1">
+                <span className="text-slate-400">Status:</span>
+                <span className={`font-bold uppercase ${
+                  brokerData?.providers?.angelone?.status === 'connected' 
+                    ? 'text-emerald-400' 
+                    : brokerData?.providers?.angelone?.status === 'authenticating'
+                    ? 'text-amber-400'
+                    : 'text-blue-300'
+                }`}>
+                  {brokerData?.providers?.angelone?.status || 'disconnected'}
+                </span>
+              </div>
             </div>
 
             {/* Credentials Input Form */}
@@ -204,7 +252,7 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
                   onChange={(e) => setAngelApiKey(e.target.value)}
                   placeholder="e.g. kE3jK8bL9..."
                   className="w-full rounded-lg border border-terminal-700 bg-terminal-850 px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
-                  required
+                  required={!brokerData?.providers?.angelone?.apiKey || brokerData?.providers?.angelone?.apiKey === 'Not configured'}
                 />
               </div>
 
@@ -216,28 +264,39 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
                   onChange={(e) => setAngelClientCode(e.target.value)}
                   placeholder="e.g. A123456"
                   className="w-full rounded-lg border border-terminal-700 bg-terminal-850 px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
-                  required
+                  required={!brokerData?.providers?.angelone?.clientCode || brokerData?.providers?.angelone?.clientCode === 'Not configured'}
                 />
               </div>
 
               <div>
-                <label className="text-[10px] text-slate-400 block mb-1">ACCOUNT PASSWORD (OPTIONAL)</label>
+                <label className="text-[10px] text-slate-400 block mb-1">ACCOUNT PASSWORD / PIN (OPTIONAL)</label>
                 <input
                   type={showAngelSecret ? 'text' : 'password'}
                   value={angelPassword}
                   onChange={(e) => setAngelPassword(e.target.value)}
-                  placeholder="Encrypted into server vault"
+                  placeholder="Enter demat / trading account PIN or password"
                   className="w-full rounded-lg border border-terminal-700 bg-terminal-850 px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] text-slate-400 block mb-1">TOTP KEY / 6-DIGIT CODE</label>
+                <label className="text-[10px] text-slate-400 block mb-1">TOTP KEY / 6-DIGIT CODE (OPTIONAL)</label>
                 <input
                   type={showAngelSecret ? 'text' : 'password'}
                   value={angelTotp}
                   onChange={(e) => setAngelTotp(e.target.value)}
-                  placeholder="Authenticator secret / code"
+                  placeholder="Authenticator secret key or 6-digit TOTP"
+                  className="w-full rounded-lg border border-terminal-700 bg-terminal-850 px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-slate-400 block mb-1">JWT SESSION TOKEN (OPTIONAL / DIRECT TOKEN)</label>
+                <textarea
+                  rows={2}
+                  value={angelJwtToken}
+                  onChange={(e) => setAngelJwtToken(e.target.value)}
+                  placeholder="Paste Angel One JWT token directly (optional)"
                   className="w-full rounded-lg border border-terminal-700 bg-terminal-850 px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
                 />
               </div>
@@ -258,7 +317,7 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
                 disabled={loading}
                 className="w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-500 font-bold text-white text-xs transition-colors cursor-pointer"
               >
-                Save & Encrypt Angel One Credentials
+                Save & Connect Angel One SmartAPI
               </button>
             </form>
           </div>
