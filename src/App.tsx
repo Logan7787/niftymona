@@ -21,6 +21,7 @@ import { TechnicalCharts } from './pages/TechnicalCharts';
 import { SignalsAlerts } from './pages/SignalsAlerts';
 import { PaperTrading } from './pages/PaperTrading';
 import { HistoricalAnalysis } from './pages/HistoricalAnalysis';
+import { OptionPrediction } from './pages/OptionPrediction';
 import { BrokerSettings } from './pages/BrokerSettings';
 import { GeneralSettings } from './pages/GeneralSettings';
 import { ConnectionDiagnostics } from './pages/ConnectionDiagnostics';
@@ -120,6 +121,16 @@ function MainTerminal() {
             onTradeClick={handleQuickTrade}
             onSelectExpiry={market.changeExpiry}
             onNavigateToPage={setActivePage}
+          />
+        )}
+
+        {activePage === 'prediction' && (
+          <OptionPrediction
+            underlying={market.underlying}
+            optionChain={market.optionChain}
+            indicators={market.indicators}
+            onTradeClick={handleQuickTrade}
+            onNavigateToChain={() => setActivePage('option-chain')}
           />
         )}
 
