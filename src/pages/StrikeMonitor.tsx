@@ -14,6 +14,7 @@ import {
   Target, Sparkles, Zap, Layers, TrendingUp, TrendingDown,
   ArrowUpDown, Filter, Eye, RefreshCw
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface StrikeMonitorProps {
   optionChain: OptionChainSnapshot | null;
@@ -30,6 +31,13 @@ export const StrikeMonitor: React.FC<StrikeMonitorProps> = ({
   onSelectExpiry,
   onNavigateToPage,
 }) => {
+  const { user } = useAuth();
+  const isRestrictedUser = Boolean(
+    user?.username?.toLowerCase().trim() === 'monapadmavathi@gmail.com' ||
+    user?.username?.toLowerCase().trim() === 'monapadmavathi' ||
+    user?.email?.toLowerCase().trim() === 'monapadmavathi@gmail.com'
+  );
+
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
   const [strikeFilter, setStrikeFilter] = useState<string>('');
   const [rangeCount, setRangeCount] = useState<number>(10);
@@ -497,7 +505,7 @@ export const StrikeMonitor: React.FC<StrikeMonitorProps> = ({
               <span>Trade Put (₹{(activeRow.pe.ltp || 0).toFixed(1)})</span>
             </button>
 
-            {onNavigateToPage && (
+            {!isRestrictedUser && onNavigateToPage && (
               <button
                 onClick={() => onNavigateToPage('option-chain')}
                 className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-terminal-700 bg-slate-100 dark:bg-terminal-850 hover:bg-slate-200 dark:hover:bg-terminal-800 text-slate-700 dark:text-slate-300 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"

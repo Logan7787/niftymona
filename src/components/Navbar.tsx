@@ -8,6 +8,7 @@ import {
   LayoutDashboard, TableProperties, Target, LineChart, 
   BellRing, Briefcase, History, KeyRound, Sliders, Radio, Eye 
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 export type PageId = 
   | 'dashboard' 
@@ -29,7 +30,15 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ activePage, onSelectPage, openTradesCount = 0 }) => {
-  const navItems = [
+  const { user } = useAuth();
+
+  const isRestrictedUser = Boolean(
+    user?.username?.toLowerCase().trim() === 'monapadmavathi@gmail.com' ||
+    user?.username?.toLowerCase().trim() === 'monapadmavathi' ||
+    user?.email?.toLowerCase().trim() === 'monapadmavathi@gmail.com'
+  );
+
+  const allNavItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'strike-monitor', label: 'Strike Monitor', icon: Eye },
     { id: 'option-chain', label: 'Live Option Chain', icon: TableProperties },
@@ -42,6 +51,19 @@ export const Navbar: React.FC<NavbarProps> = ({ activePage, onSelectPage, openTr
     { id: 'general-settings', label: 'Settings', icon: Sliders },
     { id: 'diagnostics', label: 'Diagnostics', icon: Radio },
   ];
+
+  // If username is monapadmavathi@gmail.com, show only:
+  // Strike Monitor, Broker APIs, Settings, Diagnostics
+  const RESTRICTED_PAGE_IDS: PageId[] = [
+    'strike-monitor',
+    'broker-settings',
+    'general-settings',
+    'diagnostics',
+  ];
+
+  const navItems = isRestrictedUser
+    ? allNavItems.filter((item) => RESTRICTED_PAGE_IDS.includes(item.id as PageId))
+    : allNavItems;
 
   return (
     <div className="border-b border-terminal-800 bg-terminal-900/60 px-2 sm:px-4 overflow-x-auto scrollbar-thin">

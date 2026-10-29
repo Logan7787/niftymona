@@ -37,8 +37,9 @@ export const api = {
         if (error) throw error;
         const user = {
           id: data.user.id,
-          username: data.user.email?.split('@')[0] || username,
+          username: username,
           full_name: data.user.user_metadata?.full_name || username,
+          email: data.user.email || (username.includes('@') ? username : undefined),
           role: 'trader',
         };
         return { success: true, token: data.session.access_token, user };
@@ -52,6 +53,7 @@ export const api = {
       id: `user_${username.toLowerCase()}`,
       username: username,
       full_name: username,
+      email: username.includes('@') ? username : undefined,
       role: 'trader',
     };
     const token = `token_${username.toLowerCase()}_${Date.now()}`;

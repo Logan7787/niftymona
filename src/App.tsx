@@ -26,8 +26,18 @@ import { GeneralSettings } from './pages/GeneralSettings';
 import { ConnectionDiagnostics } from './pages/ConnectionDiagnostics';
 
 function MainTerminal() {
-  const { isAuthenticated, isLoading } = useAuth();
-  const [activePage, setActivePage] = useState<PageId>('dashboard');
+  const { user, isAuthenticated, isLoading } = useAuth();
+
+  const isRestrictedUser = Boolean(
+    user?.username?.toLowerCase().trim() === 'monapadmavathi@gmail.com' ||
+    user?.username?.toLowerCase().trim() === 'monapadmavathi' ||
+    user?.email?.toLowerCase().trim() === 'monapadmavathi@gmail.com'
+  );
+
+  const [activePage, setActivePage] = useState<PageId>(() => {
+    return isRestrictedUser ? 'strike-monitor' : 'dashboard';
+  });
+
   const [quickTradeTarget, setQuickTradeTarget] = useState<{
     symbol: string;
     strike: number;
@@ -37,7 +47,23 @@ function MainTerminal() {
 
   const market = useMarketData();
 
+  // If restricted user is logged in, ensure they stay on allowed pages only
+  React.useEffect(() => {
+    const ALLOWED_RESTRICTED_PAGES: PageId[] = [
+      'strike-monitor',
+      'broker-settings',
+      'general-settings',
+      'diagnostics',
+    ];
+    if (isRestrictedUser && !ALLOWED_RESTRICTED_PAGES.includes(activePage)) {
+      setActivePage('strike-monitor');
+    }
+  }, [isRestrictedUser, activePage]);
+
   const handleQuickTrade = (symbol: string, strike: number, type: 'CE' | 'PE', price: number) => {
+    if (isRestrictedUser) {
+      return;
+    }
     setQuickTradeTarget({ symbol, strike, type, price });
     setActivePage('paper-trading');
   };
