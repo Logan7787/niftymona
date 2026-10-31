@@ -21,9 +21,16 @@ export interface StrikePrediction {
   confidenceScore: number; // 0 - 100%
   expectedMove: 'BULLISH' | 'BEARISH' | 'SIDEWAYS';
   entryPrice: number;
+  entryTimeWindow: string;
+  entryCondition: string;
   target1: number;
   target2: number;
   stopLoss: number;
+  targetExitTime: string;
+  mandatoryExitTime: string;
+  maxHoldingMinutes: number;
+  trailingSlRule: string;
+  exitStrategyReason: string;
   riskReward: string;
   oiBuildUp: OIBuildUp;
   oiBuildUpLabel: string;
@@ -243,6 +250,26 @@ export class PredictionEngine {
     const rrRatio = (potentialGain / potentialLoss).toFixed(1);
     const riskReward = `1 : ${rrRatio}`;
 
+    const nowHour = new Date().getHours();
+    const nowMin = new Date().getMinutes();
+    const totalMins = nowHour * 60 + nowMin;
+
+    let entryTimeWindow = "09:20 AM - 10:45 AM (Morning Momentum)";
+    if (totalMins >= 13 * 60 + 15) {
+      entryTimeWindow = "01:15 PM - 02:45 PM (Afternoon Trend)";
+    } else if (totalMins >= 11 * 60 + 15) {
+      entryTimeWindow = "11:30 AM - 01:15 PM (Mid-day Decay: Trade Small)";
+    }
+
+    const maxHoldingMinutes = moneyness === 'ITM' ? 75 : moneyness === 'ATM' ? 50 : 35;
+    const targetExitTime = `Expected Target in ~${moneyness === 'ITM' ? '45-60' : '30-45'} mins`;
+    const mandatoryExitTime = "03:15 PM (Intraday Cut-off)";
+    const trailingSlRule = `Move SL to cost (₹${entryPrice.toFixed(1)}) once Target 1 is hit`;
+    const entryCondition = action === 'SELL_WRITE'
+      ? `Sell/Write on resistance retest near ₹${(entryPrice * 1.05).toFixed(1)}`
+      : `Enter on pullback near ₹${(entryPrice * 0.98).toFixed(1)} - ₹${entryPrice.toFixed(1)} or VWAP hold`;
+    const exitStrategyReason = `Book 70% at Target 1 (₹${target1.toFixed(1)}), trail rest to Target 2 (₹${target2.toFixed(1)}). Cut loss if 5m candle breaks ₹${stopLoss.toFixed(1)}.`;
+
     return {
       strike,
       optionType,
@@ -252,9 +279,16 @@ export class PredictionEngine {
       confidenceScore,
       expectedMove,
       entryPrice,
+      entryTimeWindow,
+      entryCondition,
       target1,
       target2,
       stopLoss,
+      targetExitTime,
+      mandatoryExitTime,
+      maxHoldingMinutes,
+      trailingSlRule,
+      exitStrategyReason,
       riskReward,
       oiBuildUp: oiAnalysis.type,
       oiBuildUpLabel: oiAnalysis.label,
