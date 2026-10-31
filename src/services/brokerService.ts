@@ -381,6 +381,7 @@ class BrokerService {
               'X-ClientLocalIP': '127.0.0.1',
               'X-ClientPublicIP': '127.0.0.1',
               'X-MACAddress': 'fe80::1',
+              'X-MACaddress': 'fe80::1',
               'X-UserType': 'USER',
             },
             timeout: 10000,
@@ -392,7 +393,14 @@ class BrokerService {
           creds.feedToken = loginRes.data.data.feedToken;
           this.saveAngelOneCredentials(creds);
         } else {
-          const errMsg = loginRes.data?.message || 'Login failed with Angel One credentials.';
+          let errMsg = 'Login failed with Angel One credentials.';
+          if (typeof loginRes.data === 'string') {
+            errMsg = loginRes.data;
+          } else if (loginRes.data?.message) {
+            errMsg = loginRes.data.errorcode 
+              ? `${loginRes.data.message} (${loginRes.data.errorcode})` 
+              : loginRes.data.message;
+          }
           throw new Error(errMsg);
         }
       }
@@ -438,7 +446,13 @@ class BrokerService {
       return { success: true, message: 'Connected to Angel One SmartAPI Live Feed!' };
     } catch (err: any) {
       this.connectionStatus = 'error';
-      const msg = err.response?.data?.message || err.message || 'Failed to connect to Angel One SmartAPI';
+      const rawData = err.response?.data;
+      let msg = err.message || 'Failed to connect to Angel One SmartAPI';
+      if (typeof rawData === 'string') {
+        msg = rawData;
+      } else if (rawData?.message) {
+        msg = rawData.errorcode ? `${rawData.message} (${rawData.errorcode})` : rawData.message;
+      }
       this.statusMessage = msg;
       this.notifyListeners();
       return { success: false, message: msg };
@@ -482,6 +496,7 @@ class BrokerService {
             'X-ClientLocalIP': '127.0.0.1',
             'X-ClientPublicIP': '127.0.0.1',
             'X-MACAddress': 'fe80::1',
+            'X-MACaddress': 'fe80::1',
             'X-UserType': 'USER',
           },
           timeout: 8000,

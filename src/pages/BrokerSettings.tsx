@@ -285,9 +285,16 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
                   type={showAngelSecret ? 'text' : 'password'}
                   value={angelTotp}
                   onChange={(e) => setAngelTotp(e.target.value)}
-                  placeholder="Authenticator secret key or 6-digit TOTP"
+                  placeholder="Authenticator secret key (recommended) or 6-digit TOTP"
                   className="w-full rounded-lg border border-terminal-700 bg-terminal-850 px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
                 />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  💡 <strong>Tip:</strong> Paste your <strong>TOTP Secret Key</strong> from{' '}
+                  <a href="https://smartapi.angelone.in/enable-totp" target="_blank" rel="noreferrer" className="text-blue-400 underline">
+                    smartapi.angelone.in/enable-totp
+                  </a>{' '}
+                  to auto-generate codes on every tick. If using a 6-digit code, submit immediately before it expires.
+                </p>
               </div>
 
               <div>
@@ -299,6 +306,9 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
                   placeholder="Paste Angel One JWT token directly (optional)"
                   className="w-full rounded-lg border border-terminal-700 bg-terminal-850 px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
                 />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  💡 <strong>Direct Access:</strong> If PIN/TOTP login fails or has static IP issues, generate a token in SmartAPI and paste it here directly to bypass login.
+                </p>
               </div>
 
               <div className="flex items-center justify-between pt-1">
