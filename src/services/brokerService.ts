@@ -5,14 +5,14 @@
 // ==============================================================================
 
 import axios from 'axios';
-import { 
-  BrokerProvider, ConnectionStatus, NormalizedMarketTick, 
-  UnderlyingSnapshot, OptionChainSnapshot, TechnicalIndicatorData, 
-  SignalOutput, OptionChainRow, Candle 
+import {
+  BrokerProvider, ConnectionStatus, NormalizedMarketTick,
+  UnderlyingSnapshot, OptionChainSnapshot, TechnicalIndicatorData,
+  SignalOutput, OptionChainRow, Candle
 } from '../types/market';
-import { 
-  InstrumentService, IndicatorService, SignalService, 
-  PaperTradingService, ListedInstrument 
+import {
+  InstrumentService, IndicatorService, SignalService,
+  PaperTradingService, ListedInstrument
 } from './marketEngine';
 import { generateTOTP } from './totp';
 
@@ -52,16 +52,16 @@ class BrokerService {
   public paperTradingService = new PaperTradingService();
 
   // Market state
-  private spotPrice: number = 22722.55;
-  private spotOpen: number = 22708.80;
-  private spotHigh: number = 22829.75;
-  private spotLow: number = 22636.85;
-  private spotPrevClose: number = 22753.20;
-  private spotChange: number = -30.65;
-  private spotChangePercent: number = -0.13;
-  private spotVolume: number = 4500000;
+  private spotPrice: number = 23053.10;
+  private spotOpen: number = 23020.00;
+  private spotHigh: number = 23110.50;
+  private spotLow: number = 22990.20;
+  private spotPrevClose: number = 23053.10;
+  private spotChange: number = 0.00;
+  private spotChangePercent: number = 0.00;
+  private spotVolume: number = 5500000;
   private selectedExpiry: string = '';
-  private currentAtmStrike: number = 22700;
+  private currentAtmStrike: number = 23050;
   private lastUpdate: string = new Date().toISOString();
   private spotCandles: Candle[] = [];
   private indicators: TechnicalIndicatorData | null = null;
@@ -397,8 +397,8 @@ class BrokerService {
           if (typeof loginRes.data === 'string') {
             errMsg = loginRes.data;
           } else if (loginRes.data?.message) {
-            errMsg = loginRes.data.errorcode 
-              ? `${loginRes.data.message} (${loginRes.data.errorcode})` 
+            errMsg = loginRes.data.errorcode
+              ? `${loginRes.data.message} (${loginRes.data.errorcode})`
               : loginRes.data.message;
           }
           throw new Error(errMsg);
@@ -413,30 +413,8 @@ class BrokerService {
       expiryDate.setDate(today.getDate() + daysUntilThursday);
       const weeklyExpiry = expiryDate.toISOString().split('T')[0];
 
-      const instruments: ListedInstrument[] = [
-        {
-          token: '26000',
-          symbol: 'NIFTY 50',
-          name: 'NIFTY',
-          expiry: '',
-          strike: 0,
-          lotSize: 65,
-          instrumentType: 'INDEX',
-          exchange: 'NSE',
-          tickSize: 0.05,
-        }
-      ];
-
-      const baseStrike = Math.round((this.spotPrice || 22700) / 50) * 50;
-      for (let s = baseStrike - 600; s <= baseStrike + 600; s += 50) {
-        instruments.push(
-          { token: `ANGEL_${s}_CE`, symbol: `NIFTY ${s} CE`, name: 'NIFTY', expiry: weeklyExpiry, strike: s, lotSize: 65, instrumentType: 'CE', exchange: 'NFO', tickSize: 0.05 },
-          { token: `ANGEL_${s}_PE`, symbol: `NIFTY ${s} PE`, name: 'NIFTY', expiry: weeklyExpiry, strike: s, lotSize: 65, instrumentType: 'PE', exchange: 'NFO', tickSize: 0.05 }
-        );
-      }
-
-      this.instrumentService.loadInstruments(instruments);
-      this.selectedExpiry = weeklyExpiry;
+      const baseStrike = Math.round((this.spotPrice || 23050) / 50) * 50;
+      this.rebuildAngelInstruments(baseStrike, weeklyExpiry);
 
       this.connectionStatus = 'connected';
       this.statusMessage = 'Angel One SmartAPI Live Market Feed Connected.';
@@ -457,6 +435,32 @@ class BrokerService {
       this.notifyListeners();
       return { success: false, message: msg };
     }
+  }
+
+  private rebuildAngelInstruments(atm: number, expiry: string): void {
+    const instruments: ListedInstrument[] = [
+      {
+        token: '99926000',
+        symbol: 'NIFTY 50',
+        name: 'NIFTY',
+        expiry: '',
+        strike: 0,
+        lotSize: 65,
+        instrumentType: 'INDEX',
+        exchange: 'NSE',
+        tickSize: 0.05,
+      }
+    ];
+
+    for (let s = atm - 1000; s <= atm + 1000; s += 50) {
+      instruments.push(
+        { token: `ANGEL_${s}_CE`, symbol: `NIFTY ${s} CE`, name: 'NIFTY', expiry, strike: s, lotSize: 65, instrumentType: 'CE', exchange: 'NFO', tickSize: 0.05 },
+        { token: `ANGEL_${s}_PE`, symbol: `NIFTY ${s} PE`, name: 'NIFTY', expiry, strike: s, lotSize: 65, instrumentType: 'PE', exchange: 'NFO', tickSize: 0.05 }
+      );
+    }
+
+    this.instrumentService.loadInstruments(instruments);
+    this.selectedExpiry = expiry;
   }
 
   private startAngelOnePolling(creds: AngelOneStoredCreds): void {
@@ -483,7 +487,7 @@ class BrokerService {
         {
           mode: 'FULL',
           exchangeTokens: {
-            NSE: ['26000']
+            NSE: ['99926000', '26000']
           }
         },
         {
@@ -505,7 +509,7 @@ class BrokerService {
 
       const items = res.data?.data?.fetched;
       if (Array.isArray(items) && items.length > 0) {
-        const q = items[0];
+        const q = items.find((it: any) => it.symbolToken === '99926000' || it.symbolToken === '26000' || it.tradingSymbol?.toUpperCase()?.includes('NIFTY')) || items[0];
         const now = new Date().toISOString();
         const ltp = Number(q.ltp || q.lastPrice || 0);
 
@@ -530,8 +534,9 @@ class BrokerService {
 
           const strikes = this.instrumentService.getStrikesForExpiry(this.selectedExpiry);
           const newAtm = InstrumentService.calculateATMStrike(ltp, strikes);
-          if (newAtm !== prevAtm && newAtm > 0) {
+          if (newAtm > 0 && (newAtm !== prevAtm || strikes.length === 0)) {
             this.currentAtmStrike = newAtm;
+            this.rebuildAngelInstruments(newAtm, this.selectedExpiry);
           }
 
           this.updateSpotCandle(ltp);
@@ -539,6 +544,7 @@ class BrokerService {
 
           // Mark to market paper trading
           const ltpMap = new Map<string, number>();
+          ltpMap.set('99926000', ltp);
           ltpMap.set('26000', ltp);
           ltpMap.set('NIFTY 50', ltp);
           this.paperTradingService.updateMarkToMarket(ltpMap);
@@ -593,7 +599,8 @@ class BrokerService {
       }
     ];
 
-    for (let strike = 22400; strike <= 23100; strike += 50) {
+    const base = Math.round((this.spotPrice || 23050) / 50) * 50;
+    for (let strike = base - 700; strike <= base + 700; strike += 50) {
       instruments.push(
         { token: `MOCK_${strike}_CE`, symbol: `NIFTY ${strike} CE`, name: 'NIFTY', expiry: mockExpiry, strike, lotSize: 65, instrumentType: 'CE', exchange: 'NFO', tickSize: 0.05 },
         { token: `MOCK_${strike}_PE`, symbol: `NIFTY ${strike} PE`, name: 'NIFTY', expiry: mockExpiry, strike, lotSize: 65, instrumentType: 'PE', exchange: 'NFO', tickSize: 0.05 }
@@ -617,7 +624,8 @@ class BrokerService {
       this.currentAtmStrike = InstrumentService.calculateATMStrike(this.spotPrice, strikes);
 
       // Simulate options prices
-      for (let s = 22400; s <= 23100; s += 50) {
+      const sBase = Math.round((this.spotPrice || 23050) / 50) * 50;
+      for (let s = sBase - 700; s <= sBase + 700; s += 50) {
         const ceIntrinsic = Math.max(0, this.spotPrice - s);
         const peIntrinsic = Math.max(0, s - this.spotPrice);
         const timeVal = Math.max(15, 120 - Math.abs(this.spotPrice - s) * 0.25);
@@ -706,8 +714,8 @@ class BrokerService {
 
   public getUnderlyingSnapshot(): UnderlyingSnapshot {
     const expiries = this.instrumentService.getAvailableExpiries();
-    const activeExpiry = expiries.length > 0 
-      ? (expiries.includes(this.selectedExpiry) ? this.selectedExpiry : expiries[0]) 
+    const activeExpiry = expiries.length > 0
+      ? (expiries.includes(this.selectedExpiry) ? this.selectedExpiry : expiries[0])
       : (this.selectedExpiry || '2026-10-27');
 
     const availableStrikes = this.instrumentService.getStrikesForExpiry(activeExpiry);
@@ -767,7 +775,7 @@ class BrokerService {
       const peIntrinsic = Math.max(0, strike - spot);
       const dist = Math.abs(spot - strike);
       const estTimeVal = Math.max(10, 135 - dist * 0.22);
-      
+
       const calcCeLtp = Number((ceIntrinsic + estTimeVal).toFixed(2));
       const calcPeLtp = Number((peIntrinsic + estTimeVal).toFixed(2));
       const calcCePrev = Number((calcCeLtp * 1.12).toFixed(2));
