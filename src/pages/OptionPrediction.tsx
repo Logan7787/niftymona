@@ -213,23 +213,34 @@ export const OptionPrediction: React.FC<OptionPredictionProps> = ({
       {/* ========================================================================= */}
       {lastToast && (
         <div className="fixed top-16 right-4 z-50 max-w-md w-full animate-bounce shadow-2xl">
-          <div className={`p-4 rounded-xl border backdrop-blur-md flex items-start gap-3 ${
+          <div className={`p-4 rounded-2xl border-2 shadow-2xl flex items-start gap-3.5 transition-all ${
             lastToast.type === 'success' 
-              ? 'bg-emerald-950/90 border-emerald-500 text-white shadow-emerald-900/40' 
+              ? 'bg-white dark:bg-slate-900 border-emerald-500 shadow-emerald-500/20' 
               : lastToast.type === 'warning'
-              ? 'bg-rose-950/90 border-rose-500 text-white shadow-rose-900/40'
-              : 'bg-blue-950/90 border-blue-500 text-white shadow-blue-900/40'
+              ? 'bg-white dark:bg-slate-900 border-rose-500 shadow-rose-500/20'
+              : 'bg-white dark:bg-slate-900 border-blue-500 dark:border-blue-400 shadow-blue-500/20'
           }`}>
-            <div className="p-2 rounded-lg bg-white/10 shrink-0">
-              <BellRing className="h-5 w-5 text-amber-400 animate-pulse" />
+            <div className={`p-2.5 rounded-xl shrink-0 ${
+              lastToast.type === 'success'
+                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                : lastToast.type === 'warning'
+                ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                : 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
+            }`}>
+              <BellRing className="h-5 w-5 animate-pulse" />
             </div>
-            <div className="flex-1">
-              <div className="font-extrabold text-sm">{lastToast.title}</div>
-              <div className="text-xs text-slate-200 mt-0.5 leading-relaxed">{lastToast.message}</div>
+            <div className="flex-1 min-w-0">
+              <div className="font-extrabold text-sm text-slate-900 dark:text-white tracking-tight">
+                {lastToast.title}
+              </div>
+              <div className="text-xs text-slate-700 dark:text-slate-300 mt-1 leading-relaxed font-medium">
+                {lastToast.message}
+              </div>
             </div>
             <button 
               onClick={() => setLastToast(null)} 
-              className="text-slate-400 hover:text-white p-1"
+              className="text-slate-400 hover:text-slate-900 dark:hover:text-white p-1 text-base font-bold rounded-lg transition-colors cursor-pointer"
+              title="Dismiss notification"
             >
               ✕
             </button>
@@ -419,11 +430,11 @@ export const OptionPrediction: React.FC<OptionPredictionProps> = ({
                 onClick={() => handleToggleAlert(summary.topCallPick!)}
                 className={`w-1/2 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                   isAlertActive(summary.topCallPick!.strike, 'CE')
-                    ? 'bg-amber-500/20 text-amber-500 border-amber-500/50 shadow-sm'
+                    ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/50 shadow-sm font-extrabold'
                     : 'bg-white dark:bg-terminal-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-terminal-700 hover:border-amber-500'
                 }`}
               >
-                <Bell className={`h-3.5 w-3.5 ${isAlertActive(summary.topCallPick!.strike, 'CE') ? 'text-amber-500 fill-amber-500' : ''}`} />
+                <Bell className={`h-3.5 w-3.5 ${isAlertActive(summary.topCallPick!.strike, 'CE') ? 'text-amber-600 dark:text-amber-400 fill-amber-500' : ''}`} />
                 <span>{isAlertActive(summary.topCallPick!.strike, 'CE') ? 'Alert Armed' : 'Set Live Alert'}</span>
               </button>
 
@@ -511,11 +522,11 @@ export const OptionPrediction: React.FC<OptionPredictionProps> = ({
                 onClick={() => handleToggleAlert(summary.topPutPick!)}
                 className={`w-1/2 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                   isAlertActive(summary.topPutPick!.strike, 'PE')
-                    ? 'bg-amber-500/20 text-amber-500 border-amber-500/50 shadow-sm'
+                    ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/50 shadow-sm font-extrabold'
                     : 'bg-white dark:bg-terminal-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-terminal-700 hover:border-amber-500'
                 }`}
               >
-                <Bell className={`h-3.5 w-3.5 ${isAlertActive(summary.topPutPick!.strike, 'PE') ? 'text-amber-500 fill-amber-500' : ''}`} />
+                <Bell className={`h-3.5 w-3.5 ${isAlertActive(summary.topPutPick!.strike, 'PE') ? 'text-amber-600 dark:text-amber-400 fill-amber-500' : ''}`} />
                 <span>{isAlertActive(summary.topPutPick!.strike, 'PE') ? 'Alert Armed' : 'Set Live Alert'}</span>
               </button>
 
@@ -790,11 +801,11 @@ export const OptionPrediction: React.FC<OptionPredictionProps> = ({
                           title={hasAlert ? "Remove Live Alert" : "Set Live Audio Alert"}
                           className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
                             hasAlert
-                              ? 'bg-amber-500/20 text-amber-500 border-amber-500/50 shadow-sm'
-                              : 'bg-slate-100 dark:bg-terminal-800 text-slate-500 dark:text-slate-400 border-slate-300 dark:border-terminal-700 hover:text-amber-500'
+                              ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/50 shadow-sm font-bold'
+                              : 'bg-slate-100 dark:bg-terminal-800 text-slate-500 dark:text-slate-400 border-slate-300 dark:border-terminal-700 hover:text-amber-600 dark:hover:text-amber-400'
                           }`}
                         >
-                          <Bell className={`h-3.5 w-3.5 ${hasAlert ? 'fill-amber-500' : ''}`} />
+                          <Bell className={`h-3.5 w-3.5 ${hasAlert ? 'text-amber-600 dark:text-amber-400 fill-amber-500' : ''}`} />
                         </button>
 
                         <button
@@ -1101,11 +1112,11 @@ export const OptionPrediction: React.FC<OptionPredictionProps> = ({
                 onClick={() => handleToggleAlert(selectedPrediction)}
                 className={`w-1/2 py-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer ${
                   isAlertActive(selectedPrediction.strike, selectedPrediction.optionType)
-                    ? 'bg-amber-500/20 text-amber-500 border-amber-500/50 shadow-sm'
+                    ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/50 shadow-sm font-extrabold'
                     : 'border-slate-300 dark:border-terminal-700 text-slate-700 dark:text-slate-300 hover:border-amber-500'
                 }`}
               >
-                <Bell className={`h-4 w-4 ${isAlertActive(selectedPrediction.strike, selectedPrediction.optionType) ? 'fill-amber-500' : ''}`} />
+                <Bell className={`h-4 w-4 ${isAlertActive(selectedPrediction.strike, selectedPrediction.optionType) ? 'text-amber-600 dark:text-amber-400 fill-amber-500' : ''}`} />
                 <span>{isAlertActive(selectedPrediction.strike, selectedPrediction.optionType) ? 'Remove Alert' : 'Arm Live Alert'}</span>
               </button>
 
