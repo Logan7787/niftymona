@@ -15,6 +15,7 @@ import {
   PaperTradingService, ListedInstrument
 } from './marketEngine';
 import { generateTOTP } from './totp';
+import { angelScripService, angelToIsoExpiry, isoToAngelExpiry } from './angelScripService';
 
 export interface UpstoxStoredCreds {
   apiKey: string;
@@ -357,12 +358,13 @@ class BrokerService {
         throw new Error('Angel One SmartAPI Key and Client Code are required.');
       }
 
-      // If jwtToken is not available, perform session login
-      if (!creds.jwtToken) {
-        if (!creds.password || !creds.totp) {
-          throw new Error('Please enter Account Password & TOTP (or a direct JWT session token) for Angel One.');
-        }
+      // Initialize real instruments for the nearest upcoming expiry
+      const nearestExp = angelScripService.getNearestExpiry();
+      this.selectedExpiry = nearestExp;
+      this.rebuildAngelInstruments(this.currentAtmStrike, nearestExp);
 
+      // Perform authentication: if PIN and TOTP are present, authenticate or renew session
+      if (creds.password && creds.totp) {
         const totpCode = await generateTOTP(creds.totp);
         const loginUrl = '/api/angelone/rest/auth/angelbroking/user/v1/loginByPassword';
         const loginRes = await axios.post(
@@ -393,28 +395,60 @@ class BrokerService {
           creds.feedToken = loginRes.data.data.feedToken;
           this.saveAngelOneCredentials(creds);
         } else {
-          let errMsg = 'Login failed with Angel One credentials.';
-          if (typeof loginRes.data === 'string') {
-            errMsg = loginRes.data;
-          } else if (loginRes.data?.message) {
-            errMsg = loginRes.data.errorcode
-              ? `${loginRes.data.message} (${loginRes.data.errorcode})`
-              : loginRes.data.message;
+          // If login failed, check if we have a direct jwtToken provided
+          if (!creds.jwtToken) {
+            let errMsg = 'Login failed with Angel One credentials.';
+            if (typeof loginRes.data === 'string') {
+              errMsg = loginRes.data;
+            } else if (loginRes.data?.message) {
+              errMsg = loginRes.data.errorcode
+                ? `${loginRes.data.message} (${loginRes.data.errorcode})`
+                : loginRes.data.message;
+            }
+            throw new Error(errMsg);
           }
-          throw new Error(errMsg);
         }
+      } else if (!creds.jwtToken) {
+        throw new Error('Please enter Account Password & TOTP (or a direct JWT session token) for Angel One.');
       }
 
-      // Initialize NIFTY instruments with weekly expiry
-      const today = new Date();
-      const dayOfWeek = today.getDay();
-      const daysUntilThursday = (4 - dayOfWeek + 7) % 7 || 7;
-      const expiryDate = new Date(today);
-      expiryDate.setDate(today.getDate() + daysUntilThursday);
-      const weeklyExpiry = expiryDate.toISOString().split('T')[0];
+      // Verify connection with a live quote probe
+      const jwt = creds.jwtToken || '';
+      const authHeader = jwt.startsWith('Bearer ') ? jwt : `Bearer ${jwt}`;
+      const probeRes = await axios.post(
+        '/api/angelone/rest/secure/angelbroking/market/v1/quote/',
+        {
+          mode: 'FULL',
+          exchangeTokens: {
+            NSE: ['99926000']
+          }
+        },
+        {
+          headers: {
+            'Authorization': authHeader,
+            'X-PrivateKey': creds.apiKey,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-SourceID': 'WEB',
+            'X-ClientLocalIP': '127.0.0.1',
+            'X-ClientPublicIP': '127.0.0.1',
+            'X-MACAddress': 'fe80::1',
+            'X-MACaddress': 'fe80::1',
+            'X-UserType': 'USER',
+          },
+          timeout: 8000,
+        }
+      );
 
-      const baseStrike = Math.round((this.spotPrice || 23050) / 50) * 50;
-      this.rebuildAngelInstruments(baseStrike, weeklyExpiry);
+      if (probeRes.data?.status === false || probeRes.data?.success === false) {
+        const errCode = probeRes.data?.errorcode || probeRes.data?.errorCode;
+        const errMsg = probeRes.data?.message || 'Authentication probe failed';
+        if (errCode === 'AG8001' || errMsg.toLowerCase().includes('token')) {
+          this.connectionStatus = 'token_expired';
+          throw new Error('Angel One JWT Session Token expired (AG8001). Please re-enter your PIN & TOTP Secret.');
+        }
+        throw new Error(`Angel One SmartAPI error: ${errMsg}`);
+      }
 
       this.connectionStatus = 'connected';
       this.statusMessage = 'Angel One SmartAPI Live Market Feed Connected.';
@@ -437,30 +471,61 @@ class BrokerService {
     }
   }
 
-  private rebuildAngelInstruments(atm: number, expiry: string): void {
-    const instruments: ListedInstrument[] = [
-      {
-        token: '99926000',
-        symbol: 'NIFTY 50',
-        name: 'NIFTY',
-        expiry: '',
-        strike: 0,
-        lotSize: 65,
-        instrumentType: 'INDEX',
-        exchange: 'NSE',
-        tickSize: 0.05,
-      }
-    ];
-
-    for (let s = atm - 1000; s <= atm + 1000; s += 50) {
-      instruments.push(
-        { token: `ANGEL_${s}_CE`, symbol: `NIFTY ${s} CE`, name: 'NIFTY', expiry, strike: s, lotSize: 65, instrumentType: 'CE', exchange: 'NFO', tickSize: 0.05 },
-        { token: `ANGEL_${s}_PE`, symbol: `NIFTY ${s} PE`, name: 'NIFTY', expiry, strike: s, lotSize: 65, instrumentType: 'PE', exchange: 'NFO', tickSize: 0.05 }
+  private async reloginAngelOne(creds: AngelOneStoredCreds): Promise<boolean> {
+    try {
+      if (!creds.apiKey || !creds.clientCode || !creds.password || !creds.totp) return false;
+      const totpCode = await generateTOTP(creds.totp);
+      const loginUrl = '/api/angelone/rest/auth/angelbroking/user/v1/loginByPassword';
+      const loginRes = await axios.post(
+        loginUrl,
+        {
+          clientcode: creds.clientCode,
+          password: creds.password,
+          totp: totpCode,
+        },
+        {
+          headers: {
+            'X-PrivateKey': creds.apiKey,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-SourceID': 'WEB',
+            'X-ClientLocalIP': '127.0.0.1',
+            'X-ClientPublicIP': '127.0.0.1',
+            'X-MACAddress': 'fe80::1',
+            'X-MACaddress': 'fe80::1',
+            'X-UserType': 'USER',
+          },
+          timeout: 10000,
+        }
       );
+
+      if (loginRes.data?.status === true && loginRes.data?.data?.jwtToken) {
+        creds.jwtToken = loginRes.data.data.jwtToken;
+        creds.feedToken = loginRes.data.data.feedToken;
+        this.saveAngelOneCredentials(creds);
+        this.connectionStatus = 'connected';
+        this.statusMessage = 'Angel One session automatically renewed.';
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.warn('[AngelOne] Automatic re-login failed:', e);
+      return false;
+    }
+  }
+
+  private rebuildAngelInstruments(atm: number, expiry: string): void {
+    const exp = expiry || angelScripService.getNearestExpiry();
+    this.selectedExpiry = exp;
+    const instruments = angelScripService.getListedInstruments(exp);
+
+    this.instrumentMetaMap.clear();
+    for (const inst of instruments) {
+      this.instrumentMetaMap.set(inst.token, inst);
+      this.instrumentMetaMap.set(inst.symbol, inst);
     }
 
     this.instrumentService.loadInstruments(instruments);
-    this.selectedExpiry = expiry;
   }
 
   private startAngelOnePolling(creds: AngelOneStoredCreds): void {
@@ -479,17 +544,27 @@ class BrokerService {
 
     try {
       const jwt = creds.jwtToken || '';
+      if (!jwt) throw new Error('No JWT token');
       const authHeader = jwt.startsWith('Bearer ') ? jwt : `Bearer ${jwt}`;
       const quoteUrl = '/api/angelone/rest/secure/angelbroking/market/v1/quote/';
 
+      const exp = this.selectedExpiry || angelScripService.getNearestExpiry();
+      const nfoTokens = angelScripService.getAtmTokens(this.spotPrice || 23050, exp, 10);
+
+      const payload: any = {
+        mode: 'FULL',
+        exchangeTokens: {
+          NSE: ['99926000'],
+        }
+      };
+
+      if (nfoTokens.length > 0) {
+        payload.exchangeTokens.NFO = nfoTokens.slice(0, 45);
+      }
+
       const res = await axios.post(
         quoteUrl,
-        {
-          mode: 'FULL',
-          exchangeTokens: {
-            NSE: ['99926000', '26000']
-          }
-        },
+        payload,
         {
           headers: {
             'Authorization': authHeader,
@@ -507,14 +582,36 @@ class BrokerService {
         }
       );
 
+      // Handle business error responses returned with HTTP 200
+      if (res.data?.status === false || res.data?.success === false) {
+        const code = res.data?.errorcode || res.data?.errorCode;
+        const msg = res.data?.message || 'Quote fetch failed';
+        if (code === 'AG8001' || msg.toLowerCase().includes('token') || msg.toLowerCase().includes('session')) {
+          if (creds.password && creds.totp) {
+            console.log('[AngelOne] Session expired (AG8001), auto-renewing session...');
+            const renewed = await this.reloginAngelOne(creds);
+            if (renewed) return;
+          }
+          this.connectionStatus = 'token_expired';
+          this.statusMessage = 'Angel One JWT session token expired (AG8001). Please re-authenticate in Broker Settings.';
+          this.notifyListeners();
+          return;
+        }
+        console.warn('[AngelOne] Quote API returned error:', msg);
+        return;
+      }
+
       const items = res.data?.data?.fetched;
       if (Array.isArray(items) && items.length > 0) {
-        const q = items.find((it: any) => it.symbolToken === '99926000' || it.symbolToken === '26000' || it.tradingSymbol?.toUpperCase()?.includes('NIFTY')) || items[0];
         const now = new Date().toISOString();
-        const ltp = Number(q.ltp || q.lastPrice || 0);
 
-        if (ltp > 0) {
-          const prevAtm = this.currentAtmStrike;
+        for (const q of items) {
+          if (!q) continue;
+          const isIndex = q.symbolToken === '99926000' || q.tradingSymbol?.toLowerCase().includes('nifty 50');
+          const meta = this.instrumentMetaMap.get(q.symbolToken) || angelScripService.getContractByToken(q.symbolToken);
+          const ltp = Number(q.ltp || q.lastPrice || 0);
+          if (ltp <= 0) continue;
+
           const open = Number(q.open || ltp);
           const high = Number(q.high || ltp);
           const low = Number(q.low || ltp);
@@ -523,39 +620,84 @@ class BrokerService {
           const netChange = Number(q.netChange ?? (ltp - prevClose));
           const changePercent = Number(q.percentChange ?? (prevClose > 0 ? (netChange / prevClose) * 100 : 0));
 
-          this.spotPrice = ltp;
-          this.spotOpen = open;
-          this.spotHigh = high;
-          this.spotLow = low;
-          this.spotPrevClose = prevClose;
-          this.spotChange = netChange;
-          this.spotChangePercent = Number(changePercent.toFixed(2));
-          this.lastUpdate = now;
+          const bestBid = q.depth?.buy?.[0]?.price ? Number(q.depth.buy[0].price) : undefined;
+          const bestAsk = q.depth?.sell?.[0]?.price ? Number(q.depth.sell[0].price) : undefined;
 
-          const strikes = this.instrumentService.getStrikesForExpiry(this.selectedExpiry);
-          const newAtm = InstrumentService.calculateATMStrike(ltp, strikes);
-          if (newAtm > 0 && (newAtm !== prevAtm || strikes.length === 0)) {
-            this.currentAtmStrike = newAtm;
-            this.rebuildAngelInstruments(newAtm, this.selectedExpiry);
+          const tick: NormalizedMarketTick = {
+            provider: 'angelone',
+            exchange: isIndex ? 'NSE' : 'NFO',
+            instrumentKey: q.symbolToken,
+            tradingSymbol: q.tradingSymbol || meta?.symbol || q.symbolToken,
+            instrumentType: isIndex ? 'INDEX' : ((meta?.instrumentType as any) || (q.tradingSymbol?.endsWith('CE') ? 'CE' : 'PE')),
+            strike: meta?.strike,
+            optionType: (meta?.instrumentType as any) || (q.tradingSymbol?.endsWith('CE') ? 'CE' : 'PE'),
+            expiry: meta?.expiry || exp,
+            ltp,
+            open,
+            high,
+            low,
+            close,
+            prevClose,
+            priceChange: netChange,
+            changePercent,
+            volume: Number(q.totTrdQty || 0),
+            oi: Number(q.opnInterest || 0),
+            bidPrice: bestBid,
+            askPrice: bestAsk,
+            exchangeTimestamp: now,
+            receivedTimestamp: now,
+            isStale: false,
+          };
+
+          this.ticksMap.set(q.symbolToken, tick);
+          if (meta?.symbol) {
+            this.ticksMap.set(meta.symbol, tick);
+          }
+          if (q.tradingSymbol) {
+            this.ticksMap.set(q.tradingSymbol, tick);
           }
 
-          this.updateSpotCandle(ltp);
-          this.recalculateIndicators();
+          if (isIndex) {
+            const prevAtm = this.currentAtmStrike;
+            this.spotPrice = ltp;
+            this.spotOpen = open;
+            this.spotHigh = high;
+            this.spotLow = low;
+            this.spotPrevClose = prevClose;
+            this.spotChange = netChange;
+            this.spotChangePercent = Number(changePercent.toFixed(2));
+            this.lastUpdate = now;
 
-          // Mark to market paper trading
-          const ltpMap = new Map<string, number>();
-          ltpMap.set('99926000', ltp);
-          ltpMap.set('26000', ltp);
-          ltpMap.set('NIFTY 50', ltp);
-          this.paperTradingService.updateMarkToMarket(ltpMap);
+            const strikes = this.instrumentService.getStrikesForExpiry(this.selectedExpiry);
+            const newAtm = InstrumentService.calculateATMStrike(ltp, strikes);
+            if (newAtm > 0 && newAtm !== prevAtm) {
+              this.currentAtmStrike = newAtm;
+            }
+
+            this.updateSpotCandle(ltp);
+            this.recalculateIndicators();
+          }
         }
-      }
 
-      this.connectionStatus = 'connected';
-      const latency = Math.round(performance.now() - startMs);
-      this.notifyListeners(latency);
+        // Mark to market paper trading
+        const ltpMap = new Map<string, number>();
+        for (const [k, t] of this.ticksMap.entries()) {
+          ltpMap.set(k, t.ltp);
+          ltpMap.set(t.tradingSymbol, t.ltp);
+        }
+        this.paperTradingService.updateMarkToMarket(ltpMap);
+
+        this.connectionStatus = 'connected';
+        this.statusMessage = 'Angel One SmartAPI Live Market Feed Active';
+        const latency = Math.round(performance.now() - startMs);
+        this.notifyListeners(latency);
+      }
     } catch (err: any) {
       if (err.response?.status === 401) {
+        if (creds.password && creds.totp) {
+          const renewed = await this.reloginAngelOne(creds);
+          if (renewed) return;
+        }
         this.connectionStatus = 'token_expired';
         this.statusMessage = 'Angel One JWT session token expired. Please re-authenticate in Broker Settings.';
         this.notifyListeners();
@@ -671,6 +813,9 @@ class BrokerService {
 
   public setExpiry(expiry: string): void {
     this.selectedExpiry = expiry;
+    if (this.activeProvider === 'angelone') {
+      this.rebuildAngelInstruments(this.currentAtmStrike, expiry);
+    }
     this.subscribeActiveStrikes();
     this.notifyListeners();
   }
@@ -714,9 +859,12 @@ class BrokerService {
 
   public getUnderlyingSnapshot(): UnderlyingSnapshot {
     const expiries = this.instrumentService.getAvailableExpiries();
-    const activeExpiry = expiries.length > 0
-      ? (expiries.includes(this.selectedExpiry) ? this.selectedExpiry : expiries[0])
-      : (this.selectedExpiry || '2026-10-27');
+    const available = expiries.length > 0
+      ? expiries
+      : (this.activeProvider === 'angelone' ? angelScripService.getAvailableExpiries() : []);
+    const activeExpiry = available.length > 0
+      ? (available.includes(this.selectedExpiry) ? this.selectedExpiry : available[0])
+      : (this.selectedExpiry || '2026-11-03');
 
     const availableStrikes = this.instrumentService.getStrikesForExpiry(activeExpiry);
     const atmStrike = InstrumentService.calculateATMStrike(this.spotPrice, availableStrikes);
@@ -733,7 +881,7 @@ class BrokerService {
       prevClose: this.spotPrevClose,
       atmStrike,
       nearestExpiry: activeExpiry,
-      availableExpiries: expiries.length > 0 ? expiries : [activeExpiry],
+      availableExpiries: available.length > 0 ? available : [activeExpiry],
       indiaVix: 13.82,
       marketStatus: 'OPEN',
       lastUpdate: this.lastUpdate,
@@ -886,14 +1034,21 @@ class BrokerService {
   }
 
   private findContractTick(strike: number, type: 'CE' | 'PE', expiry: string): NormalizedMarketTick | undefined {
+    const exp = expiry || this.selectedExpiry;
     for (const tick of this.ticksMap.values()) {
       if (tick.strike === strike && tick.optionType === type) {
-        if (!tick.expiry || tick.expiry === expiry) return tick;
+        if (!tick.expiry || tick.expiry === exp || tick.expiry === angelToIsoExpiry(exp) || tick.expiry === isoToAngelExpiry(exp)) {
+          return tick;
+        }
       }
     }
-    const contract = this.instrumentService.findContract(strike, type, expiry);
+    const contract = this.instrumentService.findContract(strike, type, exp);
     if (contract && this.ticksMap.has(contract.token)) {
       return this.ticksMap.get(contract.token);
+    }
+    const angelContract = angelScripService.getContract(strike, type, exp);
+    if (angelContract && this.ticksMap.has(angelContract.token)) {
+      return this.ticksMap.get(angelContract.token);
     }
     return undefined;
   }

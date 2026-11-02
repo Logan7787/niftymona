@@ -76,12 +76,18 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
         return;
       }
 
+      // If user typed a direct JWT token, use it. Otherwise, if PIN and TOTP are provided/stored, do not pass stale JWT so a fresh token is generated.
+      const directToken = angelJwtToken.trim();
+      const pwd = angelPassword.trim() || stored?.password;
+      const totp = angelTotp.trim() || stored?.totp;
+      const tokenToUse = directToken || (pwd && totp ? undefined : stored?.jwtToken);
+
       const res = await api.saveAngelOneCredentials({
         apiKey,
         clientCode,
-        password: angelPassword.trim() || stored?.password,
-        totp: angelTotp.trim() || stored?.totp,
-        jwtToken: angelJwtToken.trim() || stored?.jwtToken,
+        password: pwd,
+        totp,
+        jwtToken: tokenToUse,
       });
       setLoading(false);
       if (res.success) {
@@ -235,9 +241,11 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
                     ? 'text-emerald-400' 
                     : brokerData?.providers?.angelone?.status === 'authenticating'
                     ? 'text-amber-400'
+                    : brokerData?.providers?.angelone?.status === 'token_expired'
+                    ? 'text-rose-400 animate-pulse'
                     : 'text-blue-300'
                 }`}>
-                  {brokerData?.providers?.angelone?.status || 'disconnected'}
+                  {brokerData?.providers?.angelone?.status === 'token_expired' ? 'SESSION EXPIRED' : (brokerData?.providers?.angelone?.status || 'disconnected')}
                 </span>
               </div>
             </div>

@@ -87,6 +87,13 @@ export const Header: React.FC<HeaderProps> = ({
           <span>CONNECTING</span>
         </div>
       );
+    } else if (connectionStatus === 'token_expired') {
+      return (
+        <div className="flex items-center gap-1.5 text-xs text-rose-400 font-mono animate-pulse">
+          <WifiOff className="h-3 w-3 text-rose-400" />
+          <span>SESSION EXPIRED</span>
+        </div>
+      );
     } else {
       return (
         <div className="flex items-center gap-1.5 text-xs text-rose-400 font-mono">
