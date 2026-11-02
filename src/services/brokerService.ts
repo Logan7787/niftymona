@@ -568,6 +568,102 @@ class BrokerService {
     }
   }
 
+  /**
+   * Directly authenticates with Angel One using PIN and TOTP to generate a fresh JWT session token.
+   */
+  public async generateAngelOneJwtToken(params: {
+    apiKey: string;
+    clientCode: string;
+    password: string;
+    totp: string;
+  }): Promise<{
+    success: boolean;
+    jwtToken?: string;
+    feedToken?: string;
+    refreshToken?: string;
+    message: string;
+  }> {
+    const { apiKey, clientCode, password, totp } = params;
+    if (!apiKey?.trim() || !clientCode?.trim() || !password?.trim() || !totp?.trim()) {
+      return {
+        success: false,
+        message: 'SmartAPI Key, Client Code, PIN, and TOTP are all required to generate a JWT token.',
+      };
+    }
+
+    try {
+      const totpCode = await generateTOTP(totp.trim());
+      if (!totpCode || !/^\d{6}$/.test(totpCode)) {
+        return {
+          success: false,
+          message: 'Failed to compute a valid 6-digit TOTP code. Verify your TOTP Key or enter a fresh 6-digit OTP.',
+        };
+      }
+
+      const loginUrl = '/api/angelone/rest/auth/angelbroking/user/v1/loginByPassword';
+      const loginRes = await axios.post(
+        loginUrl,
+        {
+          clientcode: clientCode.trim().toUpperCase(),
+          password: password.trim(),
+          totp: totpCode,
+        },
+        {
+          headers: {
+            'X-PrivateKey': apiKey.trim(),
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-SourceID': 'WEB',
+            'X-ClientLocalIP': '127.0.0.1',
+            'X-ClientPublicIP': '127.0.0.1',
+            'X-MACAddress': 'fe80::1',
+            'X-MACaddress': 'fe80::1',
+            'X-UserType': 'USER',
+          },
+          timeout: 10000,
+        }
+      );
+
+      if (loginRes.data?.status === true && loginRes.data?.data) {
+        const cleanJwt = cleanAngelJwt(loginRes.data.data.jwtToken);
+        const feedToken = loginRes.data.data.feedToken;
+        const refreshToken = loginRes.data.data.refreshToken;
+
+        return {
+          success: true,
+          jwtToken: cleanJwt,
+          feedToken,
+          refreshToken,
+          message: 'Angel One JWT Session Token generated successfully!',
+        };
+      } else {
+        let errMsg = 'Failed to generate JWT token from Angel One.';
+        const d = loginRes.data;
+        if (typeof d === 'string') {
+          errMsg = d;
+        } else if (d?.message) {
+          errMsg = d.errorcode ? `${d.message} (${d.errorcode})` : d.message;
+        }
+        return {
+          success: false,
+          message: errMsg,
+        };
+      }
+    } catch (err: any) {
+      const raw = err.response?.data;
+      let msg = err.message || 'Network error while generating JWT token';
+      if (typeof raw === 'string') {
+        msg = raw;
+      } else if (raw?.message) {
+        msg = raw.errorcode ? `${raw.message} (${raw.errorcode})` : raw.message;
+      }
+      return {
+        success: false,
+        message: msg,
+      };
+    }
+  }
+
   private async reloginAngelOne(creds: AngelOneStoredCreds): Promise<boolean> {
     try {
       if (!creds.apiKey || !creds.clientCode || !creds.password || !creds.totp) return false;

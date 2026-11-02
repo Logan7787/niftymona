@@ -159,6 +159,15 @@ export const api = {
     return brokerService.connectAngelOne(creds);
   },
 
+  async generateAngelOneJwt(params: {
+    apiKey: string;
+    clientCode: string;
+    password: string;
+    totp: string;
+  }) {
+    return brokerService.generateAngelOneJwtToken(params);
+  },
+
   async deleteBrokerCredentials(provider: BrokerProvider) {
     brokerService.deleteCredentials(provider);
     return { success: true, message: `${provider} credentials deleted.` };

@@ -7,9 +7,9 @@ import React, { useState, useEffect } from 'react';
 import { BrokerProvider } from '../types/market';
 import { api } from '../services/api';
 import { brokerService } from '../services/brokerService';
-import { 
-  KeyRound, ShieldCheck, Check, AlertCircle, RefreshCw, 
-  Trash2, ExternalLink, Zap, Lock, Eye, EyeOff 
+import {
+  KeyRound, ShieldCheck, Check, AlertCircle, RefreshCw,
+  Trash2, ExternalLink, Zap, Lock, Eye, EyeOff, Copy
 } from 'lucide-react';
 
 interface BrokerSettingsProps {
@@ -29,6 +29,9 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
   const [angelTotp, setAngelTotp] = useState('');
   const [angelJwtToken, setAngelJwtToken] = useState('');
   const [showAngelSecret, setShowAngelSecret] = useState(false);
+  const [generatingJwt, setGeneratingJwt] = useState(false);
+  const [copiedJwt, setCopiedJwt] = useState(false);
+  const [generatedJwtInfo, setGeneratedJwtInfo] = useState<{ jwt: string; feedToken?: string; time: string } | null>(null);
 
   // Upstox form
   const [upstoxApiKey, setUpstoxApiKey] = useState('');
@@ -118,6 +121,69 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
     }
   };
 
+  const handleGenerateJwtToken = async () => {
+    const key = angelApiKey.trim() || brokerData?.providers?.angelone?.apiKey;
+    const client = angelClientCode.trim() || brokerData?.providers?.angelone?.clientCode;
+    const pwd = angelPassword.trim();
+    const totp = angelTotp.trim();
+
+    if (!key || key === 'Not configured') {
+      setMsg({ type: 'error', text: 'SmartAPI Key is required to generate a JWT token.' });
+      return;
+    }
+    if (!client || client === 'Not configured') {
+      setMsg({ type: 'error', text: 'Client Code is required to generate a JWT token.' });
+      return;
+    }
+    if (!pwd) {
+      setMsg({ type: 'error', text: 'Account Password / PIN is required to generate a JWT token.' });
+      return;
+    }
+    if (!totp) {
+      setMsg({ type: 'error', text: 'TOTP Secret Key or a current 6-digit OTP is required to generate a JWT token.' });
+      return;
+    }
+
+    setGeneratingJwt(true);
+    setMsg(null);
+    try {
+      const res = await api.generateAngelOneJwt({
+        apiKey: key,
+        clientCode: client,
+        password: pwd,
+        totp,
+      });
+      setGeneratingJwt(false);
+      if (res.success && res.jwtToken) {
+        setAngelJwtToken(res.jwtToken);
+        setGeneratedJwtInfo({
+          jwt: res.jwtToken,
+          feedToken: res.feedToken,
+          time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }),
+        });
+        setMsg({
+          type: 'success',
+          text: '✓ Fresh Angel One JWT Session Token generated & populated successfully!',
+        });
+      } else {
+        setMsg({
+          type: 'error',
+          text: res.message || 'Failed to generate JWT token from Angel One.',
+        });
+      }
+    } catch (e: any) {
+      setGeneratingJwt(false);
+      setMsg({ type: 'error', text: e.message || 'Network error while generating JWT token.' });
+    }
+  };
+
+  const copyJwtToClipboard = () => {
+    if (!angelJwtToken) return;
+    navigator.clipboard.writeText(angelJwtToken);
+    setCopiedJwt(true);
+    setTimeout(() => setCopiedJwt(false), 2000);
+  };
+
   const handleSaveUpstox = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -196,11 +262,10 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
                 key={prov}
                 onClick={() => handleSwitchProvider(prov)}
                 disabled={loading}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  isActive
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${isActive
                     ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30 ring-1 ring-blue-400'
                     : 'bg-terminal-850 text-slate-300 hover:text-white border border-terminal-700'
-                }`}
+                  }`}
               >
                 <span>{prov === 'mock' ? 'Simulated Sandbox (Offline Demo)' : prov === 'angelone' ? 'Angel One SmartAPI' : 'Upstox API V3'}</span>
                 {isActive && <Check className="h-3.5 w-3.5" />}
@@ -211,9 +276,8 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
       </div>
 
       {msg && (
-        <div className={`p-3 rounded-lg border text-xs flex items-center gap-2 ${
-          msg.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300' : 'bg-rose-500/10 border-rose-500/40 text-rose-300'
-        }`}>
+        <div className={`p-3 rounded-lg border text-xs flex items-center gap-2 ${msg.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300' : 'bg-rose-500/10 border-rose-500/40 text-rose-300'
+          }`}>
           {msg.type === 'success' ? <Check className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
           <span>{msg.text}</span>
         </div>
@@ -251,17 +315,16 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
               </div>
               <div className="flex justify-between py-1">
                 <span className="text-slate-400">Status:</span>
-                <span className={`font-bold uppercase ${
-                  brokerData?.providers?.angelone?.status === 'connected' 
-                    ? 'text-emerald-400' 
+                <span className={`font-bold uppercase ${brokerData?.providers?.angelone?.status === 'connected'
+                    ? 'text-emerald-400'
                     : brokerData?.providers?.angelone?.status === 'authenticating'
-                    ? 'text-amber-400'
-                    : brokerData?.providers?.angelone?.status === 'token_expired'
-                    ? 'text-rose-400 animate-pulse'
-                    : brokerData?.providers?.angelone?.status === 'error'
-                    ? 'text-rose-400'
-                    : 'text-blue-300'
-                }`}>
+                      ? 'text-amber-400'
+                      : brokerData?.providers?.angelone?.status === 'token_expired'
+                        ? 'text-rose-400 animate-pulse'
+                        : brokerData?.providers?.angelone?.status === 'error'
+                          ? 'text-rose-400'
+                          : 'text-blue-300'
+                  }`}>
                   {brokerData?.providers?.angelone?.status === 'token_expired' ? 'SESSION EXPIRED' : (brokerData?.providers?.angelone?.status || 'disconnected')}
                 </span>
               </div>
@@ -342,16 +405,64 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
               </div>
 
               <div className="pt-2 border-t border-terminal-800">
-                <label className="text-[10px] text-slate-400 block mb-1">OR DIRECT JWT SESSION TOKEN (OPTIONAL ALTERNATIVE)</label>
-                <textarea
-                  rows={2}
-                  value={angelJwtToken}
-                  onChange={(e) => setAngelJwtToken(e.target.value)}
-                  placeholder="Paste Angel One JWT token directly (bypasses PIN & TOTP login)"
-                  className="w-full rounded-lg border border-terminal-700 bg-terminal-850 px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10px] text-slate-300 font-semibold block">
+                    DIRECT JWT SESSION TOKEN
+                  </label>
+                  <button
+                    type="button"
+                    disabled={generatingJwt}
+                    onClick={handleGenerateJwtToken}
+                    className="px-2.5 py-1 rounded bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/40 hover:border-blue-400 text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
+                    title="Generate a fresh JWT token directly using the PIN and TOTP above"
+                  >
+                    {generatingJwt ? (
+                      <>
+                        <RefreshCw className="h-3 w-3 animate-spin text-blue-400" />
+                        <span>Generating JWT...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="h-3 w-3 text-amber-400 fill-amber-400" />
+                        <span>⚡ Generate JWT Token</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <textarea
+                    rows={2}
+                    value={angelJwtToken}
+                    onChange={(e) => setAngelJwtToken(e.target.value)}
+                    placeholder="Click '⚡ Generate JWT Token' above, or paste an existing Angel One JWT token"
+                    className="w-full rounded-lg border border-terminal-700 bg-terminal-850 px-3 py-2 pr-16 text-white font-mono text-[11px] focus:border-blue-500 focus:outline-none"
+                  />
+                  {angelJwtToken && (
+                    <button
+                      type="button"
+                      onClick={copyJwtToClipboard}
+                      className="absolute right-2 top-2 px-2 py-1 rounded bg-terminal-700/90 hover:bg-terminal-600 text-slate-200 hover:text-white text-[10px] flex items-center gap-1 cursor-pointer transition-colors border border-terminal-600 shadow-sm"
+                      title="Copy JWT Token to clipboard"
+                    >
+                      {copiedJwt ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                      <span>{copiedJwt ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  )}
+                </div>
+
+                {generatedJwtInfo && (
+                  <div className="mt-1.5 p-2 rounded bg-emerald-950/30 border border-emerald-500/30 text-[10px] text-emerald-300 flex items-center justify-between">
+                    <span className="flex items-center gap-1">
+                      <Check className="h-3 w-3 text-emerald-400" />
+                      Fresh Session Token Active ({generatedJwtInfo.time})
+                    </span>
+                    <span className="font-mono text-[9px] text-slate-400">{generatedJwtInfo.jwt.length} characters</span>
+                  </div>
+                )}
+
                 <p className="text-[10px] text-slate-400 mt-1">
-                  💡 <strong>Direct Access:</strong> If PIN/TOTP login fails or has static IP issues, generate a token in SmartAPI and paste it here directly.
+                  💡 <strong>One-Click Generation:</strong> Fill your PIN &amp; TOTP above, then click <strong>⚡ Generate JWT Token</strong> to fetch and populate your session token instantly without leaving this page.
                 </p>
               </div>
 
