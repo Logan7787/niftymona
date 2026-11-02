@@ -391,7 +391,7 @@ class BrokerService {
             {
               mode: 'FULL',
               exchangeTokens: {
-                NSE: ['99926000']
+                NSE: ['99926000', '26000']
               }
             },
             {
@@ -413,6 +413,45 @@ class BrokerService {
           if (probeRes.data?.status !== false && probeRes.data?.success !== false) {
             isAuthenticated = true;
             this.saveAngelOneCredentials(creds);
+
+            // Immediately parse live index quote from probe response to update spot price instantly
+            const probeItems = probeRes.data?.data?.fetched;
+            if (Array.isArray(probeItems) && probeItems.length > 0) {
+              for (const q of probeItems) {
+                const tokenStr = String(q.symbolToken || q.token || '');
+                const symStr = String(q.tradingSymbol || q.tradingsymbol || '').toLowerCase();
+                if (q.exchange === 'NSE' || tokenStr === '99926000' || tokenStr === '26000' || symStr.includes('nifty')) {
+                  const ltp = Number(q.ltp ?? q.lastPrice ?? q.close ?? 0);
+                  if (ltp > 0) {
+                    const open = Number(q.open ?? ltp);
+                    const high = Number(q.high ?? ltp);
+                    const low = Number(q.low ?? ltp);
+                    const close = Number(q.close ?? ltp);
+                    const netChange = Number(q.netChange ?? (close > 0 ? ltp - close : 0));
+                    const prevClose = close > 0 && Math.abs(ltp - close) > 0 ? close : (ltp - netChange);
+                    const changePercent = Number(q.percentChange ?? (prevClose > 0 ? (netChange / prevClose) * 100 : 0));
+
+                    this.spotPrice = ltp;
+                    this.spotOpen = open;
+                    this.spotHigh = high;
+                    this.spotLow = low;
+                    this.spotPrevClose = prevClose;
+                    this.spotChange = netChange;
+                    this.spotChangePercent = Number(changePercent.toFixed(2));
+                    this.lastUpdate = new Date().toISOString();
+
+                    const strikes = this.instrumentService.getStrikesForExpiry(this.selectedExpiry);
+                    const newAtm = InstrumentService.calculateATMStrike(ltp, strikes);
+                    if (newAtm > 0) {
+                      this.currentAtmStrike = newAtm;
+                    }
+                    this.updateSpotCandle(ltp);
+                    this.recalculateIndicators();
+                    break;
+                  }
+                }
+              }
+            }
           } else {
             console.warn('[AngelOne] Direct JWT token probe rejected by server:', probeRes.data?.message || probeRes.data);
           }
@@ -582,17 +621,17 @@ class BrokerService {
       const quoteUrl = '/api/angelone/rest/secure/angelbroking/market/v1/quote';
 
       const exp = this.selectedExpiry || angelScripService.getNearestExpiry();
-      const nfoTokens = angelScripService.getAtmTokens(this.spotPrice || 23050, exp, 10);
+      const nfoTokens = angelScripService.getAtmTokens(this.spotPrice || 23050, exp, 8);
 
       const payload: any = {
         mode: 'FULL',
         exchangeTokens: {
-          NSE: ['99926000'],
+          NSE: ['99926000', '26000'],
         }
       };
 
       if (nfoTokens.length > 0) {
-        payload.exchangeTokens.NFO = nfoTokens.slice(0, 45);
+        payload.exchangeTokens.NFO = nfoTokens.slice(0, 24);
       }
 
       const res = await axios.post(
@@ -640,17 +679,20 @@ class BrokerService {
 
         for (const q of items) {
           if (!q) continue;
-          const isIndex = q.symbolToken === '99926000' || q.tradingSymbol?.toLowerCase().includes('nifty 50');
-          const meta = this.instrumentMetaMap.get(q.symbolToken) || angelScripService.getContractByToken(q.symbolToken);
-          const ltp = Number(q.ltp || q.lastPrice || 0);
+          const tokenStr = String(q.symbolToken || q.token || '');
+          const symStr = String(q.tradingSymbol || q.tradingsymbol || '').toLowerCase();
+          const isIndex = q.exchange === 'NSE' || tokenStr === '99926000' || tokenStr === '26000' || symStr.includes('nifty');
+          const meta = this.instrumentMetaMap.get(tokenStr) || angelScripService.getContractByToken(tokenStr);
+
+          const ltp = Number(q.ltp ?? q.lastPrice ?? q.close ?? 0);
           if (ltp <= 0) continue;
 
-          const open = Number(q.open || ltp);
-          const high = Number(q.high || ltp);
-          const low = Number(q.low || ltp);
-          const close = Number(q.close || ltp);
-          const prevClose = close;
-          const netChange = Number(q.netChange ?? (ltp - prevClose));
+          const open = Number(q.open ?? ltp);
+          const high = Number(q.high ?? ltp);
+          const low = Number(q.low ?? ltp);
+          const close = Number(q.close ?? ltp);
+          const netChange = Number(q.netChange ?? (close > 0 ? ltp - close : 0));
+          const prevClose = close > 0 && Math.abs(ltp - close) > 0 ? close : (ltp - netChange);
           const changePercent = Number(q.percentChange ?? (prevClose > 0 ? (netChange / prevClose) * 100 : 0));
 
           const bestBid = q.depth?.buy?.[0]?.price ? Number(q.depth.buy[0].price) : undefined;
@@ -659,11 +701,11 @@ class BrokerService {
           const tick: NormalizedMarketTick = {
             provider: 'angelone',
             exchange: isIndex ? 'NSE' : 'NFO',
-            instrumentKey: q.symbolToken,
-            tradingSymbol: q.tradingSymbol || meta?.symbol || q.symbolToken,
-            instrumentType: isIndex ? 'INDEX' : ((meta?.instrumentType as any) || (q.tradingSymbol?.endsWith('CE') ? 'CE' : 'PE')),
+            instrumentKey: tokenStr,
+            tradingSymbol: q.tradingSymbol || meta?.symbol || tokenStr,
+            instrumentType: isIndex ? 'INDEX' : ((meta?.instrumentType as any) || (symStr.endsWith('ce') ? 'CE' : 'PE')),
             strike: meta?.strike,
-            optionType: (meta?.instrumentType as any) || (q.tradingSymbol?.endsWith('CE') ? 'CE' : 'PE'),
+            optionType: (meta?.instrumentType as any) || (symStr.endsWith('ce') ? 'CE' : 'PE'),
             expiry: meta?.expiry || exp,
             ltp,
             open,
@@ -673,7 +715,7 @@ class BrokerService {
             prevClose,
             priceChange: netChange,
             changePercent,
-            volume: Number(q.totTrdQty || 0),
+            volume: Number(q.totTrdQty || q.tradeVolume || 0),
             oi: Number(q.opnInterest || 0),
             bidPrice: bestBid,
             askPrice: bestAsk,
@@ -682,7 +724,7 @@ class BrokerService {
             isStale: false,
           };
 
-          this.ticksMap.set(q.symbolToken, tick);
+          this.ticksMap.set(tokenStr, tick);
           if (meta?.symbol) {
             this.ticksMap.set(meta.symbol, tick);
           }
