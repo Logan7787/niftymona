@@ -52,6 +52,36 @@ function cleanAngelJwt(raw: string): string {
     .replace(/[\r\n\s]/g, '');
 }
 
+// Strictly identifies the NIFTY 50 Index record and prevents option contracts from being treated as index
+function isNiftyIndex(q: any): boolean {
+  if (!q) return false;
+  const token = String(q.symbolToken || q.token || '').trim();
+  const exchange = String(q.exchange || '').toUpperCase().trim();
+  const sym = String(q.tradingSymbol || q.tradingsymbol || q.symbol || '').toUpperCase().trim();
+
+  // 1. Explicit Index Token match (Angel One official index tokens)
+  if (token === '99926000' || token === '26000') {
+    return true;
+  }
+
+  // 2. Options are always on NFO and end with CE or PE -> strictly NEVER the index
+  if (exchange === 'NFO' || sym.endsWith('CE') || sym.endsWith('PE')) {
+    return false;
+  }
+
+  // 3. Exact symbol match on NSE cash/index segment
+  if (sym === 'NIFTY 50' || sym === 'NIFTY' || sym === 'NIFTY-I' || sym === 'NIFTY INDEX') {
+    return true;
+  }
+
+  // 4. Any item from NSE exchange that does not look like an equity stock or option
+  if (exchange === 'NSE' && sym.startsWith('NIFTY') && !/\d{4,}/.test(sym)) {
+    return true;
+  }
+
+  return false;
+}
+
 class BrokerService {
   private activeProvider: BrokerProvider = 'mock';
   private connectionStatus: ConnectionStatus = 'connected';
@@ -61,17 +91,17 @@ class BrokerService {
   public instrumentService = new InstrumentService();
   public paperTradingService = new PaperTradingService();
 
-  // Market state
-  private spotPrice: number = 23053.10;
-  private spotOpen: number = 23020.00;
-  private spotHigh: number = 23110.50;
-  private spotLow: number = 22990.20;
+  // Market state (initialized with official prior settlement)
+  private spotPrice: number = 23440.80;
+  private spotOpen: number = 23222.30;
+  private spotHigh: number = 23440.80;
+  private spotLow: number = 23207.05;
   private spotPrevClose: number = 23053.10;
-  private spotChange: number = 0.00;
-  private spotChangePercent: number = 0.00;
+  private spotChange: number = 387.70;
+  private spotChangePercent: number = 1.68;
   private spotVolume: number = 5500000;
   private selectedExpiry: string = '';
-  private currentAtmStrike: number = 23050;
+  private currentAtmStrike: number = 23450;
   private lastUpdate: string = new Date().toISOString();
   private spotCandles: Candle[] = [];
   private indicators: TechnicalIndicatorData | null = null;
@@ -410,45 +440,48 @@ class BrokerService {
               timeout: 8000,
             }
           );
-          if (probeRes.data?.status !== false && probeRes.data?.success !== false) {
+          const isProbeSuccess =
+            probeRes.data &&
+            typeof probeRes.data === 'object' &&
+            probeRes.data.status !== false &&
+            probeRes.data.success !== false &&
+            (probeRes.data.status === true || Array.isArray(probeRes.data.data?.fetched));
+
+          if (isProbeSuccess) {
             isAuthenticated = true;
             this.saveAngelOneCredentials(creds);
 
             // Immediately parse live index quote from probe response to update spot price instantly
             const probeItems = probeRes.data?.data?.fetched;
             if (Array.isArray(probeItems) && probeItems.length > 0) {
-              for (const q of probeItems) {
-                const tokenStr = String(q.symbolToken || q.token || '');
-                const symStr = String(q.tradingSymbol || q.tradingsymbol || '').toLowerCase();
-                if (q.exchange === 'NSE' || tokenStr === '99926000' || tokenStr === '26000' || symStr.includes('nifty')) {
-                  const ltp = Number(q.ltp ?? q.lastPrice ?? q.close ?? 0);
-                  if (ltp > 0) {
-                    const open = Number(q.open ?? ltp);
-                    const high = Number(q.high ?? ltp);
-                    const low = Number(q.low ?? ltp);
-                    const close = Number(q.close ?? ltp);
-                    const netChange = Number(q.netChange ?? (close > 0 ? ltp - close : 0));
-                    const prevClose = close > 0 && Math.abs(ltp - close) > 0 ? close : (ltp - netChange);
-                    const changePercent = Number(q.percentChange ?? (prevClose > 0 ? (netChange / prevClose) * 100 : 0));
+              const idxRec = probeItems.find(q => isNiftyIndex(q));
+              if (idxRec) {
+                const ltp = Number(idxRec.ltp ?? idxRec.lastPrice ?? idxRec.close ?? 0);
+                if (ltp > 0) {
+                  const open = Number(idxRec.open ?? ltp);
+                  const high = Number(idxRec.high ?? ltp);
+                  const low = Number(idxRec.low ?? ltp);
+                  const close = Number(idxRec.close ?? ltp);
+                  const netChange = Number(idxRec.netChange ?? (close > 0 ? ltp - close : 0));
+                  const prevClose = close > 0 && Math.abs(ltp - close) > 0 ? close : (ltp - netChange);
+                  const changePercent = Number(idxRec.percentChange ?? (prevClose > 0 ? (netChange / prevClose) * 100 : 0));
 
-                    this.spotPrice = ltp;
-                    this.spotOpen = open;
-                    this.spotHigh = high;
-                    this.spotLow = low;
-                    this.spotPrevClose = prevClose;
-                    this.spotChange = netChange;
-                    this.spotChangePercent = Number(changePercent.toFixed(2));
-                    this.lastUpdate = new Date().toISOString();
+                  this.spotPrice = ltp;
+                  this.spotOpen = open;
+                  this.spotHigh = high;
+                  this.spotLow = low;
+                  this.spotPrevClose = prevClose;
+                  this.spotChange = netChange;
+                  this.spotChangePercent = Number(changePercent.toFixed(2));
+                  this.lastUpdate = new Date().toISOString();
 
-                    const strikes = this.instrumentService.getStrikesForExpiry(this.selectedExpiry);
-                    const newAtm = InstrumentService.calculateATMStrike(ltp, strikes);
-                    if (newAtm > 0) {
-                      this.currentAtmStrike = newAtm;
-                    }
-                    this.updateSpotCandle(ltp);
-                    this.recalculateIndicators();
-                    break;
+                  const strikes = this.instrumentService.getStrikesForExpiry(this.selectedExpiry);
+                  const newAtm = InstrumentService.calculateATMStrike(ltp, strikes);
+                  if (newAtm > 0) {
+                    this.currentAtmStrike = newAtm;
                   }
+                  this.updateSpotCandle(ltp);
+                  this.recalculateIndicators();
                 }
               }
             }
@@ -654,6 +687,12 @@ class BrokerService {
         }
       );
 
+      // Handle unexpected non-JSON response (e.g. gateway error)
+      if (!res.data || typeof res.data !== 'object') {
+        console.warn('[AngelOne] Received non-JSON response from quote endpoint:', typeof res.data);
+        return;
+      }
+
       // Handle business error responses returned with HTTP 200
       if (res.data?.status === false || res.data?.success === false) {
         const code = res.data?.errorcode || res.data?.errorCode;
@@ -677,11 +716,72 @@ class BrokerService {
       if (Array.isArray(items) && items.length > 0) {
         const now = new Date().toISOString();
 
+        // 1. Process NIFTY 50 Index record FIRST and EXCLUSIVELY
+        const indexRecord = items.find(q => isNiftyIndex(q));
+        if (indexRecord) {
+          const ltp = Number(indexRecord.ltp ?? indexRecord.lastPrice ?? indexRecord.close ?? 0);
+          if (ltp > 0) {
+            const open = Number(indexRecord.open ?? ltp);
+            const high = Number(indexRecord.high ?? ltp);
+            const low = Number(indexRecord.low ?? ltp);
+            const close = Number(indexRecord.close ?? ltp);
+            const netChange = Number(indexRecord.netChange ?? (close > 0 ? ltp - close : 0));
+            const prevClose = close > 0 && Math.abs(ltp - close) > 0 ? close : (ltp - netChange);
+            const changePercent = Number(indexRecord.percentChange ?? (prevClose > 0 ? (netChange / prevClose) * 100 : 0));
+
+            const prevAtm = this.currentAtmStrike;
+            this.spotPrice = ltp;
+            this.spotOpen = open;
+            this.spotHigh = high;
+            this.spotLow = low;
+            this.spotPrevClose = prevClose;
+            this.spotChange = netChange;
+            this.spotChangePercent = Number(changePercent.toFixed(2));
+            this.lastUpdate = now;
+
+            const strikes = this.instrumentService.getStrikesForExpiry(this.selectedExpiry);
+            const newAtm = InstrumentService.calculateATMStrike(ltp, strikes);
+            if (newAtm > 0 && newAtm !== prevAtm) {
+              this.currentAtmStrike = newAtm;
+            }
+
+            this.updateSpotCandle(ltp);
+            this.recalculateIndicators();
+
+            const idxTick: NormalizedMarketTick = {
+              provider: 'angelone',
+              exchange: 'NSE',
+              instrumentKey: String(indexRecord.symbolToken || '99926000'),
+              tradingSymbol: indexRecord.tradingSymbol || 'Nifty 50',
+              instrumentType: 'INDEX',
+              strike: 0,
+              expiry: '',
+              ltp,
+              open,
+              high,
+              low,
+              close,
+              prevClose,
+              priceChange: netChange,
+              changePercent,
+              volume: Number(indexRecord.totTrdQty || indexRecord.tradeVolume || 0),
+              oi: Number(indexRecord.opnInterest || 0),
+              exchangeTimestamp: now,
+              receivedTimestamp: now,
+              isStale: false,
+            };
+            this.ticksMap.set('99926000', idxTick);
+            this.ticksMap.set('26000', idxTick);
+            this.ticksMap.set('NIFTY 50', idxTick);
+            this.ticksMap.set('NIFTY', idxTick);
+          }
+        }
+
+        // 2. Process Option Contracts (strictly excluding index records)
         for (const q of items) {
-          if (!q) continue;
+          if (!q || isNiftyIndex(q)) continue;
           const tokenStr = String(q.symbolToken || q.token || '');
           const symStr = String(q.tradingSymbol || q.tradingsymbol || '').toLowerCase();
-          const isIndex = q.exchange === 'NSE' || tokenStr === '99926000' || tokenStr === '26000' || symStr.includes('nifty');
           const meta = this.instrumentMetaMap.get(tokenStr) || angelScripService.getContractByToken(tokenStr);
 
           const ltp = Number(q.ltp ?? q.lastPrice ?? q.close ?? 0);
@@ -700,10 +800,10 @@ class BrokerService {
 
           const tick: NormalizedMarketTick = {
             provider: 'angelone',
-            exchange: isIndex ? 'NSE' : 'NFO',
+            exchange: 'NFO',
             instrumentKey: tokenStr,
             tradingSymbol: q.tradingSymbol || meta?.symbol || tokenStr,
-            instrumentType: isIndex ? 'INDEX' : ((meta?.instrumentType as any) || (symStr.endsWith('ce') ? 'CE' : 'PE')),
+            instrumentType: (meta?.instrumentType as any) || (symStr.endsWith('ce') ? 'CE' : 'PE'),
             strike: meta?.strike,
             optionType: (meta?.instrumentType as any) || (symStr.endsWith('ce') ? 'CE' : 'PE'),
             expiry: meta?.expiry || exp,
@@ -730,27 +830,6 @@ class BrokerService {
           }
           if (q.tradingSymbol) {
             this.ticksMap.set(q.tradingSymbol, tick);
-          }
-
-          if (isIndex) {
-            const prevAtm = this.currentAtmStrike;
-            this.spotPrice = ltp;
-            this.spotOpen = open;
-            this.spotHigh = high;
-            this.spotLow = low;
-            this.spotPrevClose = prevClose;
-            this.spotChange = netChange;
-            this.spotChangePercent = Number(changePercent.toFixed(2));
-            this.lastUpdate = now;
-
-            const strikes = this.instrumentService.getStrikesForExpiry(this.selectedExpiry);
-            const newAtm = InstrumentService.calculateATMStrike(ltp, strikes);
-            if (newAtm > 0 && newAtm !== prevAtm) {
-              this.currentAtmStrike = newAtm;
-            }
-
-            this.updateSpotCandle(ltp);
-            this.recalculateIndicators();
           }
         }
 

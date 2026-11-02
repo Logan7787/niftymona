@@ -4,14 +4,6 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/api/upstox/:path*",
-      "destination": "https://api.upstox.com/:path*"
-    },
-    {
-      "source": "/api/angelone/:path*",
-      "destination": "https://apiconnect.angelone.in/:path*"
-    },
-    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
