@@ -43,6 +43,15 @@ export type MarketDataListener = (data: {
   latencyMs: number;
 }) => void;
 
+// Helper to sanitize direct or received Angel One JWT session tokens
+function cleanAngelJwt(raw: string): string {
+  return (raw || '')
+    .trim()
+    .replace(/^bearer\s+/i, '')
+    .replace(/^["']|["']$/g, '')
+    .replace(/[\r\n\s]/g, '');
+}
+
 class BrokerService {
   private activeProvider: BrokerProvider = 'mock';
   private connectionStatus: ConnectionStatus = 'connected';
@@ -370,11 +379,13 @@ class BrokerService {
       this.selectedExpiry = nearestExp;
       this.rebuildAngelInstruments(this.currentAtmStrike, nearestExp);
 
-      // 1. If we have a jwtToken, probe it first before burning an OTP or calling loginByPassword
+      // 1. If a direct or stored JWT token is provided, verify it first with a live probe
       let isAuthenticated = false;
       if (creds.jwtToken) {
+        const cleanJwt = cleanAngelJwt(creds.jwtToken);
+        creds.jwtToken = cleanJwt;
         try {
-          const authHeader = creds.jwtToken.startsWith('Bearer ') ? creds.jwtToken : `Bearer ${creds.jwtToken}`;
+          const authHeader = `Bearer ${cleanJwt}`;
           const probeRes = await axios.post(
             '/api/angelone/rest/secure/angelbroking/market/v1/quote',
             {
@@ -396,18 +407,21 @@ class BrokerService {
                 'X-MACaddress': 'fe80::1',
                 'X-UserType': 'USER',
               },
-              timeout: 6000,
+              timeout: 8000,
             }
           );
           if (probeRes.data?.status !== false && probeRes.data?.success !== false) {
             isAuthenticated = true;
+            this.saveAngelOneCredentials(creds);
+          } else {
+            console.warn('[AngelOne] Direct JWT token probe rejected by server:', probeRes.data?.message || probeRes.data);
           }
-        } catch {
-          // Token probe failed, will attempt password+TOTP login below
+        } catch (probeErr: any) {
+          console.warn('[AngelOne] Direct JWT token probe error:', probeErr?.response?.data || probeErr?.message);
         }
       }
 
-      // 2. If not authenticated yet and PIN + TOTP provided, authenticate
+      // 2. If JWT token was not provided or failed verification, try PIN + TOTP login
       if (!isAuthenticated) {
         if (creds.password && creds.totp) {
           const totpCode = await generateTOTP(creds.totp);
@@ -436,9 +450,8 @@ class BrokerService {
           );
 
           if (loginRes.data?.status === true && loginRes.data?.data) {
-            creds.jwtToken = loginRes.data.data.jwtToken;
+            creds.jwtToken = cleanAngelJwt(loginRes.data.data.jwtToken);
             creds.feedToken = loginRes.data.data.feedToken;
-            // If totp was a 6-digit one-time code, do not persist it for future auto-logins
             if (creds.totp && /^\d{6}$/.test(creds.totp.trim())) {
               creds.totp = undefined;
             }
@@ -458,46 +471,8 @@ class BrokerService {
         } else if (!creds.jwtToken) {
           throw new Error('Please enter Account PIN & TOTP (or a direct JWT session token) to connect Angel One.');
         } else {
-          throw new Error('Angel One JWT Session Token expired (AG8001). Please enter your PIN & TOTP to reconnect.');
+          throw new Error('Direct JWT Session Token is invalid or expired (AG8001). Please paste a fresh JWT token from SmartAPI.');
         }
-      }
-
-      // 3. Verify connection with a live quote probe
-      const jwt = creds.jwtToken || '';
-      const authHeader = jwt.startsWith('Bearer ') ? jwt : `Bearer ${jwt}`;
-      const probeRes = await axios.post(
-        '/api/angelone/rest/secure/angelbroking/market/v1/quote',
-        {
-          mode: 'FULL',
-          exchangeTokens: {
-            NSE: ['99926000']
-          }
-        },
-        {
-          headers: {
-            'Authorization': authHeader,
-            'X-PrivateKey': creds.apiKey,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'X-SourceID': 'WEB',
-            'X-ClientLocalIP': '127.0.0.1',
-            'X-ClientPublicIP': '127.0.0.1',
-            'X-MACAddress': 'fe80::1',
-            'X-MACaddress': 'fe80::1',
-            'X-UserType': 'USER',
-          },
-          timeout: 8000,
-        }
-      );
-
-      if (probeRes.data?.status === false || probeRes.data?.success === false) {
-        const errCode = probeRes.data?.errorcode || probeRes.data?.errorCode;
-        const errMsg = probeRes.data?.message || 'Authentication probe failed';
-        if (errCode === 'AG8001' || errMsg.toLowerCase().includes('token')) {
-          this.connectionStatus = 'token_expired';
-          throw new Error('Angel One JWT Session Token expired (AG8001). Please re-enter your PIN & TOTP Secret.');
-        }
-        throw new Error(`Angel One SmartAPI error: ${errMsg}`);
       }
 
       this.connectionStatus = 'connected';
@@ -601,9 +576,9 @@ class BrokerService {
     const startMs = performance.now();
 
     try {
-      const jwt = creds.jwtToken || '';
+      const jwt = cleanAngelJwt(creds.jwtToken || '');
       if (!jwt) throw new Error('No JWT token');
-      const authHeader = jwt.startsWith('Bearer ') ? jwt : `Bearer ${jwt}`;
+      const authHeader = `Bearer ${jwt}`;
       const quoteUrl = '/api/angelone/rest/secure/angelbroking/market/v1/quote';
 
       const exp = this.selectedExpiry || angelScripService.getNearestExpiry();
@@ -1154,7 +1129,25 @@ class BrokerService {
   public getAngelOneCredentials(): AngelOneStoredCreds | null {
     try {
       const s = localStorage.getItem('nifty_angelone_creds');
-      return s ? JSON.parse(s) : null;
+      if (s) {
+        const parsed = JSON.parse(s);
+        if (parsed && (parsed.apiKey || parsed.jwtToken)) return parsed;
+      }
+      const envKey = (import.meta as any).env?.VITE_ANGELONE_API_KEY;
+      const envClient = (import.meta as any).env?.VITE_ANGELONE_CLIENT_CODE;
+      const envJwt = (import.meta as any).env?.VITE_ANGELONE_JWT_TOKEN;
+      const envPin = (import.meta as any).env?.VITE_ANGELONE_PASSWORD;
+      const envTotp = (import.meta as any).env?.VITE_ANGELONE_TOTP_KEY;
+      if (envKey || envJwt) {
+        return {
+          apiKey: envKey || '',
+          clientCode: envClient || '',
+          password: envPin,
+          totp: envTotp,
+          jwtToken: envJwt,
+        };
+      }
+      return null;
     } catch {
       return null;
     }
