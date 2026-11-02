@@ -416,7 +416,7 @@ class BrokerService {
       const jwt = creds.jwtToken || '';
       const authHeader = jwt.startsWith('Bearer ') ? jwt : `Bearer ${jwt}`;
       const probeRes = await axios.post(
-        '/api/angelone/rest/secure/angelbroking/market/v1/quote/',
+        '/api/angelone/rest/secure/angelbroking/market/v1/quote',
         {
           mode: 'FULL',
           exchangeTokens: {
@@ -546,7 +546,7 @@ class BrokerService {
       const jwt = creds.jwtToken || '';
       if (!jwt) throw new Error('No JWT token');
       const authHeader = jwt.startsWith('Bearer ') ? jwt : `Bearer ${jwt}`;
-      const quoteUrl = '/api/angelone/rest/secure/angelbroking/market/v1/quote/';
+      const quoteUrl = '/api/angelone/rest/secure/angelbroking/market/v1/quote';
 
       const exp = this.selectedExpiry || angelScripService.getNearestExpiry();
       const nfoTokens = angelScripService.getAtmTokens(this.spotPrice || 23050, exp, 10);
