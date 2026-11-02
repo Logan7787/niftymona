@@ -109,6 +109,7 @@ export const api = {
       apiKey: angelCreds?.apiKey ? `${angelCreds.apiKey.slice(0, 3)}****` : 'Not configured',
       status: activeProvider === 'angelone' ? brokerService.getConnectionStatus() : (angelCreds?.apiKey ? 'disconnected' : 'disconnected'),
       isActive: activeProvider === 'angelone',
+      errorMessage: activeProvider === 'angelone' && brokerService.getConnectionStatus() === 'error' ? brokerService.getStatusMessage() : undefined,
     };
 
     const mockMasked: BrokerCredentialMasked = {

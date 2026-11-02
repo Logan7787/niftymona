@@ -127,7 +127,14 @@ class BrokerService {
       if (savedProvider === 'upstox' && upstoxCreds?.accessToken) {
         this.connectUpstox(upstoxCreds);
       } else if (savedProvider === 'angelone' && angelCreds?.apiKey && angelCreds?.clientCode) {
-        this.connectAngelOne(angelCreds);
+        if (angelCreds.jwtToken || (angelCreds.password && angelCreds.totp)) {
+          this.connectAngelOne(angelCreds);
+        } else {
+          this.activeProvider = 'angelone';
+          this.connectionStatus = 'disconnected';
+          this.statusMessage = 'Angel One credentials saved. Enter PIN & TOTP in Settings to connect.';
+          this.startMockFeed();
+        }
       } else {
         this.startMockFeed();
       }
@@ -363,40 +370,81 @@ class BrokerService {
       this.selectedExpiry = nearestExp;
       this.rebuildAngelInstruments(this.currentAtmStrike, nearestExp);
 
-      // Perform authentication: if PIN and TOTP are present, authenticate or renew session
-      if (creds.password && creds.totp) {
-        const totpCode = await generateTOTP(creds.totp);
-        const loginUrl = '/api/angelone/rest/auth/angelbroking/user/v1/loginByPassword';
-        const loginRes = await axios.post(
-          loginUrl,
-          {
-            clientcode: creds.clientCode,
-            password: creds.password,
-            totp: totpCode,
-          },
-          {
-            headers: {
-              'X-PrivateKey': creds.apiKey,
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-              'X-SourceID': 'WEB',
-              'X-ClientLocalIP': '127.0.0.1',
-              'X-ClientPublicIP': '127.0.0.1',
-              'X-MACAddress': 'fe80::1',
-              'X-MACaddress': 'fe80::1',
-              'X-UserType': 'USER',
+      // 1. If we have a jwtToken, probe it first before burning an OTP or calling loginByPassword
+      let isAuthenticated = false;
+      if (creds.jwtToken) {
+        try {
+          const authHeader = creds.jwtToken.startsWith('Bearer ') ? creds.jwtToken : `Bearer ${creds.jwtToken}`;
+          const probeRes = await axios.post(
+            '/api/angelone/rest/secure/angelbroking/market/v1/quote',
+            {
+              mode: 'FULL',
+              exchangeTokens: {
+                NSE: ['99926000']
+              }
             },
-            timeout: 10000,
+            {
+              headers: {
+                'Authorization': authHeader,
+                'X-PrivateKey': creds.apiKey,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-SourceID': 'WEB',
+                'X-ClientLocalIP': '127.0.0.1',
+                'X-ClientPublicIP': '127.0.0.1',
+                'X-MACAddress': 'fe80::1',
+                'X-MACaddress': 'fe80::1',
+                'X-UserType': 'USER',
+              },
+              timeout: 6000,
+            }
+          );
+          if (probeRes.data?.status !== false && probeRes.data?.success !== false) {
+            isAuthenticated = true;
           }
-        );
+        } catch {
+          // Token probe failed, will attempt password+TOTP login below
+        }
+      }
 
-        if (loginRes.data?.status === true && loginRes.data?.data) {
-          creds.jwtToken = loginRes.data.data.jwtToken;
-          creds.feedToken = loginRes.data.data.feedToken;
-          this.saveAngelOneCredentials(creds);
-        } else {
-          // If login failed, check if we have a direct jwtToken provided
-          if (!creds.jwtToken) {
+      // 2. If not authenticated yet and PIN + TOTP provided, authenticate
+      if (!isAuthenticated) {
+        if (creds.password && creds.totp) {
+          const totpCode = await generateTOTP(creds.totp);
+          const loginUrl = '/api/angelone/rest/auth/angelbroking/user/v1/loginByPassword';
+          const loginRes = await axios.post(
+            loginUrl,
+            {
+              clientcode: creds.clientCode,
+              password: creds.password,
+              totp: totpCode,
+            },
+            {
+              headers: {
+                'X-PrivateKey': creds.apiKey,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-SourceID': 'WEB',
+                'X-ClientLocalIP': '127.0.0.1',
+                'X-ClientPublicIP': '127.0.0.1',
+                'X-MACAddress': 'fe80::1',
+                'X-MACaddress': 'fe80::1',
+                'X-UserType': 'USER',
+              },
+              timeout: 10000,
+            }
+          );
+
+          if (loginRes.data?.status === true && loginRes.data?.data) {
+            creds.jwtToken = loginRes.data.data.jwtToken;
+            creds.feedToken = loginRes.data.data.feedToken;
+            // If totp was a 6-digit one-time code, do not persist it for future auto-logins
+            if (creds.totp && /^\d{6}$/.test(creds.totp.trim())) {
+              creds.totp = undefined;
+            }
+            this.saveAngelOneCredentials(creds);
+            isAuthenticated = true;
+          } else {
             let errMsg = 'Login failed with Angel One credentials.';
             if (typeof loginRes.data === 'string') {
               errMsg = loginRes.data;
@@ -407,12 +455,14 @@ class BrokerService {
             }
             throw new Error(errMsg);
           }
+        } else if (!creds.jwtToken) {
+          throw new Error('Please enter Account PIN & TOTP (or a direct JWT session token) to connect Angel One.');
+        } else {
+          throw new Error('Angel One JWT Session Token expired (AG8001). Please enter your PIN & TOTP to reconnect.');
         }
-      } else if (!creds.jwtToken) {
-        throw new Error('Please enter Account Password & TOTP (or a direct JWT session token) for Angel One.');
       }
 
-      // Verify connection with a live quote probe
+      // 3. Verify connection with a live quote probe
       const jwt = creds.jwtToken || '';
       const authHeader = jwt.startsWith('Bearer ') ? jwt : `Bearer ${jwt}`;
       const probeRes = await axios.post(
@@ -474,6 +524,14 @@ class BrokerService {
   private async reloginAngelOne(creds: AngelOneStoredCreds): Promise<boolean> {
     try {
       if (!creds.apiKey || !creds.clientCode || !creds.password || !creds.totp) return false;
+      // 6-digit one-time codes cannot be reused for automatic session renewal
+      if (/^\d{6}$/.test(creds.totp.trim())) {
+        console.warn('[AngelOne] Cannot auto-renew session with a 6-digit OTP. TOTP Secret Key required.');
+        this.connectionStatus = 'token_expired';
+        this.statusMessage = 'Angel One session expired. Please re-enter a fresh OTP or TOTP Secret Key in Settings.';
+        this.notifyListeners();
+        return false;
+      }
       const totpCode = await generateTOTP(creds.totp);
       const loginUrl = '/api/angelone/rest/auth/angelbroking/user/v1/loginByPassword';
       const loginRes = await axios.post(
@@ -1067,6 +1125,10 @@ class BrokerService {
 
   public getConnectionStatus(): ConnectionStatus {
     return this.connectionStatus;
+  }
+
+  public getStatusMessage(): string {
+    return this.statusMessage;
   }
 
   // ----------------------------------------------------------------------------

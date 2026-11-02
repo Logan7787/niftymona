@@ -51,6 +51,11 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
     if (savedAngel) {
       if (savedAngel.clientCode) setAngelClientCode(savedAngel.clientCode);
       if (savedAngel.apiKey) setAngelApiKey(savedAngel.apiKey);
+      if (savedAngel.password) setAngelPassword(savedAngel.password);
+      // Pre-fill TOTP only if it's a permanent base32 secret key (not a transient 6-digit OTP)
+      if (savedAngel.totp && !/^\d{6}$/.test(savedAngel.totp.trim())) {
+        setAngelTotp(savedAngel.totp);
+      }
       if (savedAngel.jwtToken) setAngelJwtToken(savedAngel.jwtToken);
     }
     const savedUpstox = brokerService.getUpstoxCredentials();
@@ -76,30 +81,40 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
         return;
       }
 
-      // If user typed a direct JWT token, use it. Otherwise, if PIN and TOTP are provided/stored, do not pass stale JWT so a fresh token is generated.
       const directToken = angelJwtToken.trim();
       const pwd = angelPassword.trim() || stored?.password;
-      const totp = angelTotp.trim() || stored?.totp;
-      const tokenToUse = directToken || (pwd && totp ? undefined : stored?.jwtToken);
+      const totp = angelTotp.trim() || (stored?.totp && !/^\d{6}$/.test(stored.totp.trim()) ? stored.totp : undefined);
+
+      // Validate that the user has provided either direct JWT, or PIN + TOTP, or an active session token
+      if (!directToken && (!pwd || !totp) && !stored?.jwtToken) {
+        setLoading(false);
+        setMsg({
+          type: 'error',
+          text: 'Please enter your Demat PIN and TOTP (or paste a direct JWT session token) to connect to Angel One.'
+        });
+        return;
+      }
 
       const res = await api.saveAngelOneCredentials({
         apiKey,
         clientCode,
         password: pwd,
         totp,
-        jwtToken: tokenToUse,
+        jwtToken: directToken || stored?.jwtToken,
       });
       setLoading(false);
       if (res.success) {
-        setMsg({ type: 'success', text: res.message || 'Angel One credentials saved and feed activated!' });
+        setMsg({ type: 'success', text: res.message || 'Connected to Angel One SmartAPI Live Feed!' });
         onSelectBroker('angelone');
         fetchStatus();
       } else {
         setMsg({ type: 'error', text: res.message || 'Failed to connect with Angel One credentials' });
+        fetchStatus();
       }
     } catch (err: any) {
       setLoading(false);
       setMsg({ type: 'error', text: err.message || 'Server error' });
+      fetchStatus();
     }
   };
 
@@ -243,17 +258,34 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
                     ? 'text-amber-400'
                     : brokerData?.providers?.angelone?.status === 'token_expired'
                     ? 'text-rose-400 animate-pulse'
+                    : brokerData?.providers?.angelone?.status === 'error'
+                    ? 'text-rose-400'
                     : 'text-blue-300'
                 }`}>
                   {brokerData?.providers?.angelone?.status === 'token_expired' ? 'SESSION EXPIRED' : (brokerData?.providers?.angelone?.status || 'disconnected')}
                 </span>
+              </div>
+              {brokerData?.providers?.angelone?.errorMessage && (
+                <div className="mt-2 text-[11px] text-rose-300 bg-rose-950/40 border border-rose-800/40 p-2 rounded">
+                  ⚠️ {brokerData.providers.angelone.errorMessage}
+                </div>
+              )}
+            </div>
+
+            {/* Quick guidance box */}
+            <div className="mt-3 p-2.5 rounded-lg bg-blue-950/30 border border-blue-500/20 text-[11px] text-blue-200 leading-relaxed">
+              <strong>Connection Checklist:</strong>
+              <div className="mt-1 text-slate-300 space-y-0.5">
+                <div>• <strong>SmartAPI Key</strong> &amp; <strong>Client Code</strong></div>
+                <div>• <strong>Trading PIN</strong> (e.g. 4-digit PIN)</div>
+                <div>• <strong>TOTP Secret Key</strong> from <a href="https://smartapi.angelone.in/enable-totp" target="_blank" rel="noreferrer" className="text-blue-400 underline">enable-totp</a> (for 24/7 auto login) or a current 6-digit OTP</div>
               </div>
             </div>
 
             {/* Credentials Input Form */}
             <form onSubmit={handleSaveAngelOne} className="mt-4 space-y-3 text-xs">
               <div>
-                <label className="text-[10px] text-slate-400 block mb-1">SMARTAPI KEY</label>
+                <label className="text-[10px] text-slate-300 font-semibold block mb-1">SMARTAPI KEY</label>
                 <input
                   type="text"
                   value={angelApiKey}
@@ -265,57 +297,61 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
               </div>
 
               <div>
-                <label className="text-[10px] text-slate-400 block mb-1">CLIENT CODE</label>
+                <label className="text-[10px] text-slate-300 font-semibold block mb-1">CLIENT CODE</label>
                 <input
                   type="text"
                   value={angelClientCode}
-                  onChange={(e) => setAngelClientCode(e.target.value)}
-                  placeholder="e.g. A123456"
+                  onChange={(e) => setAngelClientCode(e.target.value.toUpperCase())}
+                  placeholder="e.g. AAAF337345"
                   className="w-full rounded-lg border border-terminal-700 bg-terminal-850 px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
                   required={!brokerData?.providers?.angelone?.clientCode || brokerData?.providers?.angelone?.clientCode === 'Not configured'}
                 />
               </div>
 
               <div>
-                <label className="text-[10px] text-slate-400 block mb-1">ACCOUNT PASSWORD / PIN (OPTIONAL)</label>
+                <label className="text-[10px] text-slate-300 font-semibold block mb-1">
+                  ACCOUNT PASSWORD / PIN <span className="text-amber-400 font-normal">(Required for Auto-Login)</span>
+                </label>
                 <input
                   type={showAngelSecret ? 'text' : 'password'}
                   value={angelPassword}
                   onChange={(e) => setAngelPassword(e.target.value)}
-                  placeholder="Enter demat / trading account PIN or password"
+                  placeholder="Enter 4-digit demat trading PIN"
                   className="w-full rounded-lg border border-terminal-700 bg-terminal-850 px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] text-slate-400 block mb-1">TOTP KEY / 6-DIGIT CODE (OPTIONAL)</label>
+                <label className="text-[10px] text-slate-300 font-semibold block mb-1">
+                  TOTP SECRET KEY / 6-DIGIT CODE <span className="text-amber-400 font-normal">(Required for Auto-Login)</span>
+                </label>
                 <input
                   type={showAngelSecret ? 'text' : 'password'}
                   value={angelTotp}
                   onChange={(e) => setAngelTotp(e.target.value)}
-                  placeholder="Authenticator secret key (recommended) or 6-digit TOTP"
+                  placeholder="Paste permanent TOTP Secret Key (recommended) or 6-digit OTP"
                   className="w-full rounded-lg border border-terminal-700 bg-terminal-850 px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
                 />
                 <p className="text-[10px] text-slate-400 mt-1">
-                  💡 <strong>Tip:</strong> Paste your <strong>TOTP Secret Key</strong> from{' '}
+                  💡 <strong>Tip:</strong> Paste your permanent <strong>TOTP Secret Key</strong> from{' '}
                   <a href="https://smartapi.angelone.in/enable-totp" target="_blank" rel="noreferrer" className="text-blue-400 underline">
                     smartapi.angelone.in/enable-totp
                   </a>{' '}
-                  to auto-generate codes on every tick. If using a 6-digit code, submit immediately before it expires.
+                  so the app auto-generates OTPs and you never have to re-enter codes. If using a 6-digit code, submit before it expires.
                 </p>
               </div>
 
-              <div>
-                <label className="text-[10px] text-slate-400 block mb-1">JWT SESSION TOKEN (OPTIONAL / DIRECT TOKEN)</label>
+              <div className="pt-2 border-t border-terminal-800">
+                <label className="text-[10px] text-slate-400 block mb-1">OR DIRECT JWT SESSION TOKEN (OPTIONAL ALTERNATIVE)</label>
                 <textarea
                   rows={2}
                   value={angelJwtToken}
                   onChange={(e) => setAngelJwtToken(e.target.value)}
-                  placeholder="Paste Angel One JWT token directly (optional)"
+                  placeholder="Paste Angel One JWT token directly (bypasses PIN & TOTP login)"
                   className="w-full rounded-lg border border-terminal-700 bg-terminal-850 px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
                 />
                 <p className="text-[10px] text-slate-400 mt-1">
-                  💡 <strong>Direct Access:</strong> If PIN/TOTP login fails or has static IP issues, generate a token in SmartAPI and paste it here directly to bypass login.
+                  💡 <strong>Direct Access:</strong> If PIN/TOTP login fails or has static IP issues, generate a token in SmartAPI and paste it here directly.
                 </p>
               </div>
 
