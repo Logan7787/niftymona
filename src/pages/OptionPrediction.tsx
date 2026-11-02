@@ -5,18 +5,18 @@
 // ==============================================================================
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  OptionChainSnapshot, UnderlyingSnapshot, TechnicalIndicatorData 
+import {
+  OptionChainSnapshot, UnderlyingSnapshot, TechnicalIndicatorData
 } from '../types/market';
-import { 
-  PredictionEngine, StrikePrediction, MarketPredictionSummary 
+import {
+  PredictionEngine, StrikePrediction, MarketPredictionSummary
 } from '../services/predictionEngine';
-import { 
-  alertManager, LiveAlert 
+import {
+  alertManager, LiveAlert
 } from '../services/alertManager';
-import { 
-  Sparkles, TrendingUp, TrendingDown, Target, ShieldAlert, 
-  Zap, Award, Compass, BarChart2, CheckCircle2, AlertTriangle, 
+import {
+  Sparkles, TrendingUp, TrendingDown, Target, ShieldAlert,
+  Zap, Award, Compass, BarChart2, CheckCircle2, AlertTriangle,
   Filter, Search, Layers, ShieldCheck, ArrowRight, Activity,
   Bell, BellRing, Volume2, VolumeX, Clock, Trash2, Play, Check, X
 } from 'lucide-react';
@@ -213,20 +213,18 @@ export const OptionPrediction: React.FC<OptionPredictionProps> = ({
       {/* ========================================================================= */}
       {lastToast && (
         <div className="fixed top-16 right-4 z-50 max-w-md w-full animate-bounce shadow-2xl">
-          <div className={`p-4 rounded-2xl border-2 shadow-2xl flex items-start gap-3.5 transition-all ${
-            lastToast.type === 'success' 
-              ? 'bg-white dark:bg-slate-900 border-emerald-500 shadow-emerald-500/20' 
+          <div className={`p-4 rounded-2xl border-2 shadow-2xl flex items-start gap-3.5 transition-all ${lastToast.type === 'success'
+              ? 'bg-white dark:bg-slate-900 border-emerald-500 shadow-emerald-500/20'
               : lastToast.type === 'warning'
-              ? 'bg-white dark:bg-slate-900 border-rose-500 shadow-rose-500/20'
-              : 'bg-white dark:bg-slate-900 border-blue-500 dark:border-blue-400 shadow-blue-500/20'
-          }`}>
-            <div className={`p-2.5 rounded-xl shrink-0 ${
-              lastToast.type === 'success'
+                ? 'bg-white dark:bg-slate-900 border-rose-500 shadow-rose-500/20'
+                : 'bg-white dark:bg-slate-900 border-blue-500 dark:border-blue-400 shadow-blue-500/20'
+            }`}>
+            <div className={`p-2.5 rounded-xl shrink-0 ${lastToast.type === 'success'
                 ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
                 : lastToast.type === 'warning'
-                ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
-                : 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
-            }`}>
+                  ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                  : 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
+              }`}>
               <BellRing className="h-5 w-5 animate-pulse" />
             </div>
             <div className="flex-1 min-w-0">
@@ -237,8 +235,8 @@ export const OptionPrediction: React.FC<OptionPredictionProps> = ({
                 {lastToast.message}
               </div>
             </div>
-            <button 
-              onClick={() => setLastToast(null)} 
+            <button
+              onClick={() => setLastToast(null)}
               className="text-slate-400 hover:text-slate-900 dark:hover:text-white p-1 text-base font-bold rounded-lg transition-colors cursor-pointer"
               title="Dismiss notification"
             >
@@ -275,11 +273,10 @@ export const OptionPrediction: React.FC<OptionPredictionProps> = ({
             {/* Live Alerts Watcher Pill */}
             <button
               onClick={() => setShowAlertsModal(true)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
-                activeAlerts.length > 0 
-                  ? 'bg-amber-500/15 text-amber-500 border-amber-500/40 shadow-sm shadow-amber-500/20' 
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${activeAlerts.length > 0
+                  ? 'bg-amber-500/15 text-amber-500 border-amber-500/40 shadow-sm shadow-amber-500/20'
                   : 'bg-slate-100 dark:bg-terminal-850 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-terminal-700'
-              }`}
+                }`}
             >
               <BellRing className={`h-4 w-4 ${activeAlerts.length > 0 ? 'text-amber-500 animate-pulse' : 'text-slate-400'}`} />
               <span>Live Alerts ({activeAlerts.length})</span>
@@ -288,17 +285,15 @@ export const OptionPrediction: React.FC<OptionPredictionProps> = ({
             {/* Current Market Bias Badge */}
             <div className="text-right pl-2 border-l border-slate-200 dark:border-terminal-800">
               <span className="text-[10px] text-slate-400 block uppercase">SESSION BIAS</span>
-              <span className={`text-sm sm:text-base font-extrabold ${
-                summary.bias.includes('BULLISH') ? 'text-emerald-600 dark:text-emerald-400' :
-                summary.bias.includes('BEARISH') ? 'text-rose-600 dark:text-rose-400' : 'text-amber-500'
-              }`}>
+              <span className={`text-sm sm:text-base font-extrabold ${summary.bias.includes('BULLISH') ? 'text-emerald-600 dark:text-emerald-400' :
+                  summary.bias.includes('BEARISH') ? 'text-rose-600 dark:text-rose-400' : 'text-amber-500'
+                }`}>
                 {summary.bias.replace('_', ' ')}
               </span>
             </div>
-            <div className={`px-2.5 py-1 rounded-xl text-xs font-bold ${
-              summary.bias.includes('BULLISH') ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' :
-              summary.bias.includes('BEARISH') ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40' : 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
-            }`}>
+            <div className={`px-2.5 py-1 rounded-xl text-xs font-bold ${summary.bias.includes('BULLISH') ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' :
+                summary.bias.includes('BEARISH') ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40' : 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+              }`}>
               {summary.confidence}% Conf.
             </div>
           </div>
@@ -317,8 +312,8 @@ export const OptionPrediction: React.FC<OptionPredictionProps> = ({
               </span>
             </div>
             <div className="h-2.5 w-full bg-rose-500/30 rounded-full overflow-hidden flex">
-              <div 
-                className="bg-emerald-500 transition-all duration-500" 
+              <div
+                className="bg-emerald-500 transition-all duration-500"
                 style={{ width: `${summary.callBuyingPower}%` }}
               ></div>
             </div>
@@ -428,11 +423,10 @@ export const OptionPrediction: React.FC<OptionPredictionProps> = ({
             <div className="flex gap-2 pt-1">
               <button
                 onClick={() => handleToggleAlert(summary.topCallPick!)}
-                className={`w-1/2 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
-                  isAlertActive(summary.topCallPick!.strike, 'CE')
+                className={`w-1/2 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${isAlertActive(summary.topCallPick!.strike, 'CE')
                     ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/50 shadow-sm font-extrabold'
                     : 'bg-white dark:bg-terminal-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-terminal-700 hover:border-amber-500'
-                }`}
+                  }`}
               >
                 <Bell className={`h-3.5 w-3.5 ${isAlertActive(summary.topCallPick!.strike, 'CE') ? 'text-amber-600 dark:text-amber-400 fill-amber-500' : ''}`} />
                 <span>{isAlertActive(summary.topCallPick!.strike, 'CE') ? 'Alert Armed' : 'Set Live Alert'}</span>
@@ -520,11 +514,10 @@ export const OptionPrediction: React.FC<OptionPredictionProps> = ({
             <div className="flex gap-2 pt-1">
               <button
                 onClick={() => handleToggleAlert(summary.topPutPick!)}
-                className={`w-1/2 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
-                  isAlertActive(summary.topPutPick!.strike, 'PE')
+                className={`w-1/2 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${isAlertActive(summary.topPutPick!.strike, 'PE')
                     ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/50 shadow-sm font-extrabold'
                     : 'bg-white dark:bg-terminal-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-terminal-700 hover:border-amber-500'
-                }`}
+                  }`}
               >
                 <Bell className={`h-3.5 w-3.5 ${isAlertActive(summary.topPutPick!.strike, 'PE') ? 'text-amber-600 dark:text-amber-400 fill-amber-500' : ''}`} />
                 <span>{isAlertActive(summary.topPutPick!.strike, 'PE') ? 'Alert Armed' : 'Set Live Alert'}</span>
@@ -639,11 +632,10 @@ export const OptionPrediction: React.FC<OptionPredictionProps> = ({
               <button
                 key={f.id}
                 onClick={() => setSelectedFilter(f.id as any)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  selectedFilter === f.id
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${selectedFilter === f.id
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'bg-white dark:bg-terminal-850 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-terminal-700'
-                }`}
+                  }`}
               >
                 {f.label}
               </button>
@@ -701,22 +693,20 @@ export const OptionPrediction: React.FC<OptionPredictionProps> = ({
                   <tr
                     key={`${pred.strike}_${pred.optionType}`}
                     onClick={() => setSelectedPrediction(pred)}
-                    className={`transition-colors cursor-pointer ${
-                      hasAlert
+                    className={`transition-colors cursor-pointer ${hasAlert
                         ? 'bg-amber-500/[0.07] dark:bg-amber-500/10 ring-1 ring-inset ring-amber-500/40'
-                        : isAtm 
-                        ? 'bg-blue-600/[0.08] dark:bg-blue-600/10 font-medium' 
-                        : 'hover:bg-slate-50 dark:hover:bg-terminal-800/40'
-                    }`}
+                        : isAtm
+                          ? 'bg-blue-600/[0.08] dark:bg-blue-600/10 font-medium'
+                          : 'hover:bg-slate-50 dark:hover:bg-terminal-800/40'
+                      }`}
                   >
                     {/* Contract Symbol */}
                     <td className="py-2.5 px-3">
                       <div className="flex items-center gap-1.5">
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold ${
-                          isCall 
-                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' 
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold ${isCall
+                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
                             : 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
-                        }`}>
+                          }`}>
                           {pred.optionType}
                         </span>
                         <span className="font-extrabold text-slate-900 dark:text-white">
@@ -740,11 +730,10 @@ export const OptionPrediction: React.FC<OptionPredictionProps> = ({
                     <td className="py-2.5 px-3">
                       <div className="flex items-center gap-2">
                         <div className="w-16 h-2 bg-slate-200 dark:bg-terminal-700 rounded-full overflow-hidden">
-                          <div 
-                            className={`h-full ${
-                              pred.confidenceScore >= 75 ? 'bg-emerald-500' :
-                              pred.confidenceScore >= 55 ? 'bg-blue-500' : 'bg-slate-400'
-                            }`}
+                          <div
+                            className={`h-full ${pred.confidenceScore >= 75 ? 'bg-emerald-500' :
+                                pred.confidenceScore >= 55 ? 'bg-blue-500' : 'bg-slate-400'
+                              }`}
                             style={{ width: `${pred.confidenceScore}%` }}
                           ></div>
                         </div>
@@ -799,22 +788,20 @@ export const OptionPrediction: React.FC<OptionPredictionProps> = ({
                         <button
                           onClick={() => handleToggleAlert(pred)}
                           title={hasAlert ? "Remove Live Alert" : "Set Live Audio Alert"}
-                          className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                            hasAlert
+                          className={`p-1.5 rounded-lg border transition-all cursor-pointer ${hasAlert
                               ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/50 shadow-sm font-bold'
                               : 'bg-slate-100 dark:bg-terminal-800 text-slate-500 dark:text-slate-400 border-slate-300 dark:border-terminal-700 hover:text-amber-600 dark:hover:text-amber-400'
-                          }`}
+                            }`}
                         >
                           <Bell className={`h-3.5 w-3.5 ${hasAlert ? 'text-amber-600 dark:text-amber-400 fill-amber-500' : ''}`} />
                         </button>
 
                         <button
                           onClick={() => onTradeClick(pred.symbol, pred.strike, pred.optionType, pred.entryPrice)}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                            isCall 
-                              ? 'bg-emerald-600 hover:bg-emerald-500 text-white' 
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${isCall
+                              ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
                               : 'bg-rose-600 hover:bg-rose-500 text-white'
-                          }`}
+                            }`}
                         >
                           <Zap className="h-3 w-3" />
                           <span>Trade</span>
@@ -916,9 +903,8 @@ export const OptionPrediction: React.FC<OptionPredictionProps> = ({
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            isCall ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
-                          }`}>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${isCall ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
+                            }`}>
                             {alert.optionType}
                           </span>
                           <span className="font-extrabold text-sm text-slate-900 dark:text-white">
@@ -1011,9 +997,8 @@ export const OptionPrediction: React.FC<OptionPredictionProps> = ({
             <div className="flex items-start justify-between pb-3 border-b border-slate-200 dark:border-terminal-800">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                    selectedPrediction.optionType === 'CE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
-                  }`}>
+                  <span className={`px-2 py-0.5 rounded text-xs font-bold ${selectedPrediction.optionType === 'CE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
+                    }`}>
                     {selectedPrediction.optionType}
                   </span>
                   <h3 className="text-lg font-extrabold text-slate-900 dark:text-white">
@@ -1110,11 +1095,10 @@ export const OptionPrediction: React.FC<OptionPredictionProps> = ({
             <div className="pt-2 flex gap-2">
               <button
                 onClick={() => handleToggleAlert(selectedPrediction)}
-                className={`w-1/2 py-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer ${
-                  isAlertActive(selectedPrediction.strike, selectedPrediction.optionType)
+                className={`w-1/2 py-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer ${isAlertActive(selectedPrediction.strike, selectedPrediction.optionType)
                     ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/50 shadow-sm font-extrabold'
                     : 'border-slate-300 dark:border-terminal-700 text-slate-700 dark:text-slate-300 hover:border-amber-500'
-                }`}
+                  }`}
               >
                 <Bell className={`h-4 w-4 ${isAlertActive(selectedPrediction.strike, selectedPrediction.optionType) ? 'text-amber-600 dark:text-amber-400 fill-amber-500' : ''}`} />
                 <span>{isAlertActive(selectedPrediction.strike, selectedPrediction.optionType) ? 'Remove Alert' : 'Arm Live Alert'}</span>
