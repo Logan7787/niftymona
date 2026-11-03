@@ -34,7 +34,17 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
   const [generatedJwtInfo, setGeneratedJwtInfo] = useState<{ jwt: string; feedToken?: string; time: string } | null>(null);
   const [angelInlineMsg, setAngelInlineMsg] = useState<{ type: 'error' | 'success' | 'info'; text: string; details?: string } | null>(null);
   const [showTotpGuide, setShowTotpGuide] = useState(false);
+  const [showPythonGuide, setShowPythonGuide] = useState(false);
+  const [copiedPython, setCopiedPython] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
   const totpInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (cooldown > 0) {
+      const timer = setTimeout(() => setCooldown(cooldown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [cooldown]);
 
   // Upstox form
   const [upstoxApiKey, setUpstoxApiKey] = useState('');
@@ -118,13 +128,13 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
       const pwd = angelPassword.trim() || stored?.password;
       const totp = angelTotp.trim() || (stored?.totp && !/^\d{6}$/.test(stored.totp.trim()) ? stored.totp : undefined);
 
-      // Validate that the user has provided either direct JWT, or PIN + TOTP, or an active session token
-      if (!effectiveJwt && (!pwd || !totp)) {
+      // Validate that the user has provided an active session token or generated one
+      if (!effectiveJwt) {
         setLoading(false);
         setAngelInlineMsg({
           type: 'error',
-          text: 'PIN & OTP Required to Connect',
-          details: 'Please enter your Account PIN & 6-digit Authenticator OTP, then click "⚡ Generate JWT Token" above, or enter an active JWT token.'
+          text: 'JWT Session Token Required',
+          details: 'Please enter your current 6-digit Authenticator OTP and click "⚡ Generate JWT Token" above first, or paste an existing valid session token.'
         });
         totpInputRef.current?.focus();
         return;
@@ -159,6 +169,14 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
 
   const handleGenerateJwtToken = async () => {
     setAngelInlineMsg(null);
+    if (cooldown > 0) {
+      setAngelInlineMsg({
+        type: 'error',
+        text: `Please wait ${cooldown} seconds`,
+        details: 'Angel One limits login attempts to protect against rate limits. Try again in a few seconds.'
+      });
+      return;
+    }
     const stored = brokerService.getAngelOneCredentials();
     const key = (angelApiKey.trim() && !angelApiKey.includes('*'))
       ? angelApiKey.trim()
@@ -192,6 +210,7 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
     }
 
     setGeneratingJwt(true);
+    setCooldown(5);
     setMsg(null);
     setAngelInlineMsg({
       type: 'info',
@@ -575,7 +594,7 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
                   </label>
                   <button
                     type="button"
-                    disabled={generatingJwt}
+                    disabled={generatingJwt || cooldown > 0}
                     onClick={handleGenerateJwtToken}
                     className="px-2.5 py-1 rounded bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/40 hover:border-blue-400 text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
                     title="Generate a fresh JWT token directly using the PIN and TOTP above"
@@ -584,6 +603,11 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
                       <>
                         <RefreshCw className="h-3 w-3 animate-spin text-blue-400" />
                         <span>Generating JWT...</span>
+                      </>
+                    ) : cooldown > 0 ? (
+                      <>
+                        <RefreshCw className="h-3 w-3 text-amber-400" />
+                        <span>Wait {cooldown}s...</span>
                       </>
                     ) : (
                       <>
@@ -656,6 +680,44 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
                 <p className="text-[10px] text-slate-400 mt-1">
                   💡 <strong>One-Click Generation:</strong> Enter your 6-digit OTP above, then click <strong>⚡ Generate JWT Token</strong> to fetch and populate your session token instantly without leaving this page.
                 </p>
+
+                <div className="mt-2.5 pt-2 border-t border-terminal-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowPythonGuide(!showPythonGuide)}
+                    className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer font-medium underline"
+                  >
+                    <HelpCircle className="h-3 w-3" />
+                    <span>{showPythonGuide ? 'Hide Python script helper' : '⚡ Or generate token using Python script (1-click alternative)'}</span>
+                  </button>
+                  {showPythonGuide && (
+                    <div className="mt-2 p-2.5 rounded bg-terminal-900 border border-terminal-700 text-[10px] text-slate-300 space-y-1.5">
+                      <p className="text-slate-400 leading-relaxed">
+                        If your phone authenticator has time drift, you can run this Python script on your PC:
+                      </p>
+                      <pre className="p-2 bg-terminal-950 rounded text-emerald-300 font-mono text-[10px] overflow-x-auto selection:bg-blue-800">
+{`from SmartApi import SmartConnect
+smartApi = SmartConnect(api_key="FegEW9WP")
+data = smartApi.generateSession("AAAF337345", "7787", "${angelTotp.trim() || 'YOUR_6_DIGIT_OTP'}")
+print("JWT:", data['data']['jwtToken'])`}
+                      </pre>
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-[9px] text-slate-400">Copy the output JWT token and paste it into the Direct JWT Token box above!</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(`from SmartApi import SmartConnect\nsmartApi = SmartConnect(api_key="FegEW9WP")\ndata = smartApi.generateSession("AAAF337345", "7787", "${angelTotp.trim() || 'YOUR_6_DIGIT_OTP'}")\nprint("JWT:", data['data']['jwtToken'])`);
+                            setCopiedPython(true);
+                            setTimeout(() => setCopiedPython(false), 2000);
+                          }}
+                          className="px-2 py-0.5 rounded bg-terminal-700 hover:bg-terminal-600 text-[10px] text-white cursor-pointer"
+                        >
+                          {copiedPython ? '✓ Copied' : 'Copy Python Snippet'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center justify-between pt-1">

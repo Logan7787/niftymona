@@ -497,9 +497,8 @@ class BrokerService {
                 'Accept': 'application/json',
                 'X-SourceID': 'WEB',
                 'X-ClientLocalIP': '127.0.0.1',
-                'X-ClientPublicIP': '127.0.0.1',
-                'X-MACAddress': 'fe80::1',
-                'X-MACaddress': 'fe80::1',
+                'X-ClientPublicIP': '106.193.147.98',
+                'X-MACAddress': '02:00:00:00:00:00',
                 'X-UserType': 'USER',
               },
               timeout: 8000,
@@ -580,9 +579,8 @@ class BrokerService {
                 'Accept': 'application/json',
                 'X-SourceID': 'WEB',
                 'X-ClientLocalIP': '127.0.0.1',
-                'X-ClientPublicIP': '127.0.0.1',
-                'X-MACAddress': 'fe80::1',
-                'X-MACaddress': 'fe80::1',
+                'X-ClientPublicIP': '106.193.147.98',
+                'X-MACAddress': '02:00:00:00:00:00',
                 'X-UserType': 'USER',
               },
               timeout: 10000,
@@ -690,9 +688,8 @@ class BrokerService {
             'Accept': 'application/json',
             'X-SourceID': 'WEB',
             'X-ClientLocalIP': '127.0.0.1',
-            'X-ClientPublicIP': '127.0.0.1',
-            'X-MACAddress': 'fe80::1',
-            'X-MACaddress': 'fe80::1',
+            'X-ClientPublicIP': '106.193.147.98',
+            'X-MACAddress': '02:00:00:00:00:00',
             'X-UserType': 'USER',
           },
           timeout: 12000,
@@ -718,12 +715,18 @@ class BrokerService {
         const errCode = d?.errorcode || d?.errorCode || '';
         let errMsg = 'Failed to generate JWT token from Angel One.';
 
-        if (errCode === 'AB1050') {
-          errMsg = 'Invalid TOTP / Client combination (AB1050). Please verify: 1) Use the 6-digit code from Google Authenticator registered with SmartAPI (smartapi.angelone.in/enable-totp). 2) Enter a fresh code before the 30-second timer expires. 3) Or paste your permanent TOTP Secret Key.';
+        if (typeof d === 'string') {
+          if (d.includes('exceeding access rate') || d.includes('Access denied')) {
+            errMsg = 'Angel One rate limit reached (too many rapid requests). Please wait 15 seconds before trying again.';
+          } else if (d.includes('Request Rejected') || d.includes('<html')) {
+            errMsg = 'Request was rejected by Angel One security firewall. Please wait a moment and try again.';
+          } else {
+            errMsg = d;
+          }
+        } else if (errCode === 'AB1050') {
+          errMsg = 'Invalid TOTP / Client combination (AB1050). The 6-digit OTP has expired or does not match SmartAPI. Please enter a fresh 6-digit code from Google Authenticator, or paste your permanent TOTP Secret Key from smartapi.angelone.in/enable-totp.';
         } else if (errCode === 'AB1010') {
           errMsg = 'Invalid Account PIN (AB1010). Please verify your 4-digit demat trading PIN.';
-        } else if (typeof d === 'string') {
-          errMsg = d;
         } else if (d?.message) {
           errMsg = errCode ? `${d.message} (${errCode})` : d.message;
         }
@@ -739,7 +742,13 @@ class BrokerService {
       const raw = err.response?.data;
       let msg = err.message || 'Network error while generating JWT token';
       if (typeof raw === 'string') {
-        msg = raw;
+        if (raw.includes('exceeding access rate') || raw.includes('Access denied')) {
+          msg = 'Angel One rate limit reached (too many rapid requests). Please wait 15 seconds before trying again.';
+        } else if (raw.includes('Request Rejected') || raw.includes('<html')) {
+          msg = 'Request was rejected by Angel One security firewall. Please wait a moment and try again.';
+        } else {
+          msg = raw;
+        }
       } else if (raw?.message) {
         msg = raw.errorcode ? `${raw.message} (${raw.errorcode})` : raw.message;
       }
@@ -777,9 +786,8 @@ class BrokerService {
             'Accept': 'application/json',
             'X-SourceID': 'WEB',
             'X-ClientLocalIP': '127.0.0.1',
-            'X-ClientPublicIP': '127.0.0.1',
-            'X-MACAddress': 'fe80::1',
-            'X-MACaddress': 'fe80::1',
+            'X-ClientPublicIP': '106.193.147.98',
+            'X-MACAddress': '02:00:00:00:00:00',
             'X-UserType': 'USER',
           },
           timeout: 10000,
@@ -860,9 +868,8 @@ class BrokerService {
             'Accept': 'application/json',
             'X-SourceID': 'WEB',
             'X-ClientLocalIP': '127.0.0.1',
-            'X-ClientPublicIP': '127.0.0.1',
-            'X-MACAddress': 'fe80::1',
-            'X-MACaddress': 'fe80::1',
+            'X-ClientPublicIP': '106.193.147.98',
+            'X-MACAddress': '02:00:00:00:00:00',
             'X-UserType': 'USER',
           },
           timeout: 8000,
