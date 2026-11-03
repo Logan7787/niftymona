@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrokerProvider } from '../types/market';
 import { api } from '../services/api';
-import { brokerService } from '../services/brokerService';
+import { brokerService, isJwtExpired } from '../services/brokerService';
 import {
   KeyRound, ShieldCheck, Check, AlertCircle, RefreshCw,
   Trash2, ExternalLink, Zap, Lock, Eye, EyeOff, Copy
@@ -74,7 +74,12 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
       if (savedAngel.totp && !/^\d{6}$/.test(savedAngel.totp.trim())) {
         setAngelTotp(savedAngel.totp);
       }
-      if (savedAngel.jwtToken) setAngelJwtToken(savedAngel.jwtToken);
+      // Only pre-fill JWT token if it is still valid and not expired!
+      if (savedAngel.jwtToken && !isJwtExpired(savedAngel.jwtToken)) {
+        setAngelJwtToken(savedAngel.jwtToken);
+      } else {
+        setAngelJwtToken('');
+      }
     } else {
       setAngelApiKey('FegEW9WP');
       setAngelClientCode('AAAF337345');
@@ -104,15 +109,17 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
       }
 
       const directToken = angelJwtToken.trim();
+      const activeStoredJwt = stored?.jwtToken && !isJwtExpired(stored.jwtToken) ? stored.jwtToken : undefined;
+      const effectiveJwt = directToken || activeStoredJwt;
       const pwd = angelPassword.trim() || stored?.password;
       const totp = angelTotp.trim() || (stored?.totp && !/^\d{6}$/.test(stored.totp.trim()) ? stored.totp : undefined);
 
       // Validate that the user has provided either direct JWT, or PIN + TOTP, or an active session token
-      if (!directToken && (!pwd || !totp) && !stored?.jwtToken) {
+      if (!effectiveJwt && (!pwd || !totp)) {
         setLoading(false);
         setMsg({
           type: 'error',
-          text: 'Please enter your Demat PIN and TOTP (or paste a direct JWT session token) to connect to Angel One.'
+          text: 'Please enter your Account PIN & 6-digit Authenticator OTP, then click "⚡ Generate JWT Token" above.'
         });
         return;
       }
@@ -122,7 +129,7 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
         clientCode,
         password: pwd,
         totp,
-        jwtToken: directToken || stored?.jwtToken,
+        jwtToken: effectiveJwt,
       });
       setLoading(false);
       if (res.success) {

@@ -44,12 +44,30 @@ export type MarketDataListener = (data: {
 }) => void;
 
 // Helper to sanitize direct or received Angel One JWT session tokens
-function cleanAngelJwt(raw: string): string {
+export function cleanAngelJwt(raw: string): string {
   return (raw || '')
     .trim()
     .replace(/^bearer\s+/i, '')
     .replace(/^["']|["']$/g, '')
     .replace(/[\r\n\s]/g, '');
+}
+
+// Checks if an Angel One JWT token is expired
+export function isJwtExpired(token: string): boolean {
+  if (!token || typeof token !== 'string') return true;
+  try {
+    const clean = cleanAngelJwt(token);
+    const parts = clean.split('.');
+    if (parts.length !== 3) return true;
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const jsonStr = atob(base64);
+    const payload = JSON.parse(jsonStr);
+    if (!payload.exp) return false;
+    const nowSec = Math.floor(Date.now() / 1000);
+    return nowSec >= (payload.exp - 30);
+  } catch {
+    return false;
+  }
 }
 
 // Strictly identifies the NIFTY 50 Index record and prevents option contracts from being treated as index
@@ -412,9 +430,13 @@ class BrokerService {
       // 1. If a direct or stored JWT token is provided, verify it first with a live probe
       let isAuthenticated = false;
       if (creds.jwtToken) {
-        const cleanJwt = cleanAngelJwt(creds.jwtToken);
-        creds.jwtToken = cleanJwt;
-        try {
+        if (isJwtExpired(creds.jwtToken)) {
+          console.warn('[AngelOne] Provided or stored JWT session token has expired, clearing...');
+          creds.jwtToken = undefined;
+        } else {
+          const cleanJwt = cleanAngelJwt(creds.jwtToken);
+          creds.jwtToken = cleanJwt;
+          try {
           const authHeader = `Bearer ${cleanJwt}`;
           const probeRes = await axios.post(
             '/api/angelone/rest/secure/angelbroking/market/v1/quote',
@@ -494,6 +516,7 @@ class BrokerService {
           creds.jwtToken = undefined;
         }
       }
+    }
 
       // 2. If JWT token was not provided or failed verification, try PIN + TOTP login
       if (!isAuthenticated) {
