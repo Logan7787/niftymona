@@ -497,7 +497,7 @@ class BrokerService {
                 'Accept': 'application/json',
                 'X-SourceID': 'WEB',
                 'X-ClientLocalIP': '127.0.0.1',
-                'X-ClientPublicIP': '106.193.147.98',
+                'X-ClientPublicIP': '223.178.85.220',
                 'X-MACAddress': '02:00:00:00:00:00',
                 'X-UserType': 'USER',
               },
@@ -560,51 +560,26 @@ class BrokerService {
       }
     }
 
-      // 2. If JWT token was not provided or failed verification, try PIN + TOTP login
+      // 2. If JWT token was not provided or failed verification, try PIN + TOTP login via server endpoint
       if (!isAuthenticated) {
         if (creds.password && creds.totp) {
-          const totpCode = await generateTOTP(creds.totp);
-          const loginUrl = '/api/angelone/rest/auth/angelbroking/user/v1/loginByPassword';
-          const loginRes = await axios.post(
-            loginUrl,
-            {
-              clientcode: creds.clientCode,
-              password: creds.password,
-              totp: totpCode,
-            },
-            {
-              headers: {
-                'X-PrivateKey': creds.apiKey,
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'X-SourceID': 'WEB',
-                'X-ClientLocalIP': '127.0.0.1',
-                'X-ClientPublicIP': '106.193.147.98',
-                'X-MACAddress': '02:00:00:00:00:00',
-                'X-UserType': 'USER',
-              },
-              timeout: 10000,
-            }
-          );
+          const genRes = await this.generateAngelOneJwtToken({
+            apiKey: creds.apiKey,
+            clientCode: creds.clientCode,
+            password: creds.password,
+            totp: creds.totp,
+          });
 
-          if (loginRes.data?.status === true && loginRes.data?.data) {
-            creds.jwtToken = cleanAngelJwt(loginRes.data.data.jwtToken);
-            creds.feedToken = loginRes.data.data.feedToken;
+          if (genRes.success && genRes.jwtToken) {
+            creds.jwtToken = genRes.jwtToken;
+            creds.feedToken = genRes.feedToken;
             if (creds.totp && /^\d{6}$/.test(creds.totp.trim())) {
               creds.totp = undefined;
             }
             this.saveAngelOneCredentials(creds);
             isAuthenticated = true;
           } else {
-            let errMsg = 'Login failed with Angel One credentials.';
-            if (typeof loginRes.data === 'string') {
-              errMsg = loginRes.data;
-            } else if (loginRes.data?.message) {
-              errMsg = loginRes.data.errorcode
-                ? `${loginRes.data.message} (${loginRes.data.errorcode})`
-                : loginRes.data.message;
-            }
-            throw new Error(errMsg);
+            throw new Error(genRes.message || 'Login failed with Angel One credentials.');
           }
         } else {
           throw new Error('Your Angel One session has expired for today. Please enter your 6-digit Authenticator OTP in Broker Settings and click "⚡ Generate JWT Token".');
@@ -660,48 +635,32 @@ class BrokerService {
     const cleanPwd = password.trim();
     const cleanTotpInput = totp.trim();
 
-    console.log('[AngelOne SmartAPI] Initiating JWT Token generation for client:', cleanClient);
+    console.log('[AngelOne SmartAPI] Requesting server-side JWT session generation...');
 
     try {
-      const totpCode = await generateTOTP(cleanTotpInput);
-      if (!totpCode || !/^\d{6}$/.test(totpCode)) {
-        console.warn('[AngelOne SmartAPI] Invalid TOTP code computed:', totpCode);
-        return {
-          success: false,
-          message: 'Failed to compute a valid 6-digit TOTP code. Verify your TOTP Key or enter a fresh 6-digit OTP from your authenticator app.',
-        };
-      }
-
-      console.log('[AngelOne SmartAPI] Sending login request to SmartAPI auth endpoint...');
-      const loginUrl = '/api/angelone/rest/auth/angelbroking/user/v1/loginByPassword';
-      const loginRes = await axios.post(
-        loginUrl,
+      const serverRes = await axios.post(
+        '/api/generate-jwt',
         {
-          clientcode: cleanClient,
+          apiKey: cleanKey,
+          clientCode: cleanClient,
           password: cleanPwd,
-          totp: totpCode,
+          totp: cleanTotpInput,
+          clientPublicIp: '223.178.85.220',
         },
         {
           headers: {
-            'X-PrivateKey': cleanKey,
             'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'X-SourceID': 'WEB',
-            'X-ClientLocalIP': '127.0.0.1',
-            'X-ClientPublicIP': '106.193.147.98',
-            'X-MACAddress': '02:00:00:00:00:00',
-            'X-UserType': 'USER',
           },
-          timeout: 12000,
+          timeout: 15000,
         }
       );
 
-      console.log('[AngelOne SmartAPI] Login response status:', loginRes.data?.status, loginRes.data);
+      console.log('[AngelOne SmartAPI] Server response status:', serverRes.data?.success);
 
-      if (loginRes.data?.status === true && loginRes.data?.data) {
-        const cleanJwt = cleanAngelJwt(loginRes.data.data.jwtToken);
-        const feedToken = loginRes.data.data.feedToken;
-        const refreshToken = loginRes.data.data.refreshToken;
+      if (serverRes.data?.success === true && serverRes.data?.jwtToken) {
+        const cleanJwt = cleanAngelJwt(serverRes.data.jwtToken);
+        const feedToken = serverRes.data.feedToken;
+        const refreshToken = serverRes.data.refreshToken;
 
         return {
           success: true,
@@ -711,46 +670,21 @@ class BrokerService {
           message: 'Angel One JWT Session Token generated successfully!',
         };
       } else {
-        const d = loginRes.data;
-        const errCode = d?.errorcode || d?.errorCode || '';
-        let errMsg = 'Failed to generate JWT token from Angel One.';
-
-        if (typeof d === 'string') {
-          if (d.includes('exceeding access rate') || d.includes('Access denied')) {
-            errMsg = 'Angel One rate limit reached (too many rapid requests). Please wait 15 seconds before trying again.';
-          } else if (d.includes('Request Rejected') || d.includes('<html')) {
-            errMsg = 'Request was rejected by Angel One security firewall. Please wait a moment and try again.';
-          } else {
-            errMsg = d;
-          }
-        } else if (errCode === 'AB1050') {
-          errMsg = 'Invalid TOTP / Client combination (AB1050). The 6-digit OTP has expired or does not match SmartAPI. Please enter a fresh 6-digit code from Google Authenticator, or paste your permanent TOTP Secret Key from smartapi.angelone.in/enable-totp.';
-        } else if (errCode === 'AB1010') {
-          errMsg = 'Invalid Account PIN (AB1010). Please verify your 4-digit demat trading PIN.';
-        } else if (d?.message) {
-          errMsg = errCode ? `${d.message} (${errCode})` : d.message;
-        }
-
-        console.error('[AngelOne SmartAPI] Login rejected:', errMsg);
+        const errMsg = serverRes.data?.message || 'Failed to generate JWT token from Angel One.';
+        console.error('[AngelOne SmartAPI] Server-side login rejected:', errMsg);
         return {
           success: false,
           message: errMsg,
         };
       }
     } catch (err: any) {
-      console.error('[AngelOne SmartAPI] Login network error:', err);
+      console.error('[AngelOne SmartAPI] Server endpoint error:', err);
       const raw = err.response?.data;
       let msg = err.message || 'Network error while generating JWT token';
       if (typeof raw === 'string') {
-        if (raw.includes('exceeding access rate') || raw.includes('Access denied')) {
-          msg = 'Angel One rate limit reached (too many rapid requests). Please wait 15 seconds before trying again.';
-        } else if (raw.includes('Request Rejected') || raw.includes('<html')) {
-          msg = 'Request was rejected by Angel One security firewall. Please wait a moment and try again.';
-        } else {
-          msg = raw;
-        }
+        msg = raw;
       } else if (raw?.message) {
-        msg = raw.errorcode ? `${raw.message} (${raw.errorcode})` : raw.message;
+        msg = raw.message;
       }
       return {
         success: false,
@@ -770,33 +704,17 @@ class BrokerService {
         this.notifyListeners();
         return false;
       }
-      const totpCode = await generateTOTP(creds.totp);
-      const loginUrl = '/api/angelone/rest/auth/angelbroking/user/v1/loginByPassword';
-      const loginRes = await axios.post(
-        loginUrl,
-        {
-          clientcode: creds.clientCode,
-          password: creds.password,
-          totp: totpCode,
-        },
-        {
-          headers: {
-            'X-PrivateKey': creds.apiKey,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'X-SourceID': 'WEB',
-            'X-ClientLocalIP': '127.0.0.1',
-            'X-ClientPublicIP': '106.193.147.98',
-            'X-MACAddress': '02:00:00:00:00:00',
-            'X-UserType': 'USER',
-          },
-          timeout: 10000,
-        }
-      );
 
-      if (loginRes.data?.status === true && loginRes.data?.data?.jwtToken) {
-        creds.jwtToken = loginRes.data.data.jwtToken;
-        creds.feedToken = loginRes.data.data.feedToken;
+      const genRes = await this.generateAngelOneJwtToken({
+        apiKey: creds.apiKey,
+        clientCode: creds.clientCode,
+        password: creds.password,
+        totp: creds.totp,
+      });
+
+      if (genRes.success && genRes.jwtToken) {
+        creds.jwtToken = genRes.jwtToken;
+        creds.feedToken = genRes.feedToken;
         this.saveAngelOneCredentials(creds);
         this.connectionStatus = 'connected';
         this.statusMessage = 'Angel One session automatically renewed.';
@@ -868,7 +786,7 @@ class BrokerService {
             'Accept': 'application/json',
             'X-SourceID': 'WEB',
             'X-ClientLocalIP': '127.0.0.1',
-            'X-ClientPublicIP': '106.193.147.98',
+            'X-ClientPublicIP': '223.178.85.220',
             'X-MACAddress': '02:00:00:00:00:00',
             'X-UserType': 'USER',
           },

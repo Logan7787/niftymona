@@ -67,22 +67,13 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
     if (savedAngel) {
       if (savedAngel.clientCode && !savedAngel.clientCode.includes('*')) {
         setAngelClientCode(savedAngel.clientCode);
-      } else {
-        setAngelClientCode('AAAF337345');
       }
-
       if (savedAngel.apiKey && !savedAngel.apiKey.includes('*')) {
         setAngelApiKey(savedAngel.apiKey);
-      } else {
-        setAngelApiKey('FegEW9WP');
       }
-
       if (savedAngel.password) {
         setAngelPassword(savedAngel.password);
-      } else {
-        setAngelPassword('7787');
       }
-
       // Pre-fill TOTP only if it's a permanent base32 secret key (not a transient 6-digit OTP)
       if (savedAngel.totp && !/^\d{6}$/.test(savedAngel.totp.trim())) {
         setAngelTotp(savedAngel.totp);
@@ -93,10 +84,6 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
       } else {
         setAngelJwtToken('');
       }
-    } else {
-      setAngelApiKey('FegEW9WP');
-      setAngelClientCode('AAAF337345');
-      setAngelPassword('7787');
     }
     const savedUpstox = brokerService.getUpstoxCredentials();
     if (savedUpstox) {
@@ -180,19 +167,19 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
     const stored = brokerService.getAngelOneCredentials();
     const key = (angelApiKey.trim() && !angelApiKey.includes('*'))
       ? angelApiKey.trim()
-      : (stored?.apiKey && !stored.apiKey.includes('*') ? stored.apiKey : 'FegEW9WP');
+      : (stored?.apiKey && !stored.apiKey.includes('*') ? stored.apiKey : '');
     const client = (angelClientCode.trim() && !angelClientCode.includes('*'))
       ? angelClientCode.trim().toUpperCase()
-      : (stored?.clientCode && !stored.clientCode.includes('*') ? stored.clientCode.toUpperCase() : 'AAAF337345');
-    const pwd = angelPassword.trim() || stored?.password || '7787';
+      : (stored?.clientCode && !stored.clientCode.includes('*') ? stored.clientCode.toUpperCase() : '');
+    const pwd = angelPassword.trim() || stored?.password || '';
     const totp = angelTotp.trim() || (stored?.totp && !/^\d{6}$/.test(stored.totp.trim()) ? stored.totp : '');
 
     if (!key || key.includes('*')) {
-      setAngelInlineMsg({ type: 'error', text: 'Please enter your full SmartAPI Key (e.g. FegEW9WP).' });
+      setAngelInlineMsg({ type: 'error', text: 'Please enter your SmartAPI Key.' });
       return;
     }
     if (!client || client.includes('*')) {
-      setAngelInlineMsg({ type: 'error', text: 'Please enter your full Client Code (e.g. AAAF337345).' });
+      setAngelInlineMsg({ type: 'error', text: 'Please enter your Client Code.' });
       return;
     }
     if (!pwd) {
@@ -214,12 +201,12 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
     setMsg(null);
     setAngelInlineMsg({
       type: 'info',
-      text: 'Contacting Angel One SmartAPI auth endpoint...',
-      details: `Authenticating client ${client} with PIN and OTP...`
+      text: 'Contacting server to generate Angel One JWT session token...',
+      details: 'Sending secure auth request to SmartAPI...'
     });
 
     try {
-      console.log('[AngelOne UI] Requesting JWT session token generation for:', client);
+      console.log('[AngelOne UI] Requesting server-side JWT session token generation...');
       const res = await api.generateAngelOneJwt({
         apiKey: key,
         clientCode: client,
@@ -554,7 +541,7 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
                   <div className="mt-2 p-2.5 rounded bg-terminal-900 border border-terminal-700 text-[10px] text-slate-300 space-y-1 leading-relaxed">
                     <p className="font-semibold text-white">How to enable SmartAPI TOTP (1-minute setup):</p>
                     <p>1. Open <a href="https://smartapi.angelone.in/enable-totp" target="_blank" rel="noreferrer" className="text-blue-400 underline font-semibold">smartapi.angelone.in/enable-totp</a> in your browser.</p>
-                    <p>2. Enter your Client Code (<code className="text-amber-300">AAAF337345</code>) and PIN (<code className="text-amber-300">7787</code>), then enter the mobile OTP.</p>
+                    <p>2. Enter your Client Code and 4-digit PIN, then enter the mobile OTP.</p>
                     <p>3. Scan the QR code with <strong>Google Authenticator</strong> on your phone.</p>
                     <p>4. Enter the 6-digit code shown in Google Authenticator into the box above, then click <strong>⚡ Generate JWT Token</strong>!</p>
                   </div>
@@ -697,8 +684,8 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
                       </p>
                       <pre className="p-2 bg-terminal-950 rounded text-emerald-300 font-mono text-[10px] overflow-x-auto selection:bg-blue-800">
 {`from SmartApi import SmartConnect
-smartApi = SmartConnect(api_key="FegEW9WP")
-data = smartApi.generateSession("AAAF337345", "7787", "${angelTotp.trim() || 'YOUR_6_DIGIT_OTP'}")
+smartApi = SmartConnect(api_key="${angelApiKey.trim() || 'YOUR_API_KEY'}")
+data = smartApi.generateSession("${angelClientCode.trim() || 'YOUR_CLIENT_CODE'}", "${angelPassword.trim() || 'YOUR_PIN'}", "${angelTotp.trim() || 'YOUR_6_DIGIT_OTP'}")
 print("JWT:", data['data']['jwtToken'])`}
                       </pre>
                       <div className="flex items-center justify-between pt-1">
@@ -706,7 +693,8 @@ print("JWT:", data['data']['jwtToken'])`}
                         <button
                           type="button"
                           onClick={() => {
-                            navigator.clipboard.writeText(`from SmartApi import SmartConnect\nsmartApi = SmartConnect(api_key="FegEW9WP")\ndata = smartApi.generateSession("AAAF337345", "7787", "${angelTotp.trim() || 'YOUR_6_DIGIT_OTP'}")\nprint("JWT:", data['data']['jwtToken'])`);
+                            const snippet = `from SmartApi import SmartConnect\nsmartApi = SmartConnect(api_key="${angelApiKey.trim() || 'YOUR_API_KEY'}")\ndata = smartApi.generateSession("${angelClientCode.trim() || 'YOUR_CLIENT_CODE'}", "${angelPassword.trim() || 'YOUR_PIN'}", "${angelTotp.trim() || 'YOUR_6_DIGIT_OTP'}")\nprint("JWT:", data['data']['jwtToken'])`;
+                            navigator.clipboard.writeText(snippet);
                             setCopiedPython(true);
                             setTimeout(() => setCopiedPython(false), 2000);
                           }}
