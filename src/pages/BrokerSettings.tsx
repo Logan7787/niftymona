@@ -3,13 +3,13 @@
 // Independent provider cards for Angel One & Upstox with AES-256-GCM vault security
 // ==============================================================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BrokerProvider } from '../types/market';
 import { api } from '../services/api';
-import { brokerService, isJwtExpired } from '../services/brokerService';
+import { brokerService, isJwtExpired, getJwtExpiryInfo } from '../services/brokerService';
 import {
   KeyRound, ShieldCheck, Check, AlertCircle, RefreshCw,
-  Trash2, ExternalLink, Zap, Lock, Eye, EyeOff, Copy
+  Trash2, ExternalLink, Zap, Lock, Eye, EyeOff, Copy, Info, HelpCircle
 } from 'lucide-react';
 
 interface BrokerSettingsProps {
@@ -32,6 +32,9 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
   const [generatingJwt, setGeneratingJwt] = useState(false);
   const [copiedJwt, setCopiedJwt] = useState(false);
   const [generatedJwtInfo, setGeneratedJwtInfo] = useState<{ jwt: string; feedToken?: string; time: string } | null>(null);
+  const [angelInlineMsg, setAngelInlineMsg] = useState<{ type: 'error' | 'success' | 'info'; text: string; details?: string } | null>(null);
+  const [showTotpGuide, setShowTotpGuide] = useState(false);
+  const totpInputRef = useRef<HTMLInputElement>(null);
 
   // Upstox form
   const [upstoxApiKey, setUpstoxApiKey] = useState('');
@@ -97,6 +100,7 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
     e.preventDefault();
     setLoading(true);
     setMsg(null);
+    setAngelInlineMsg(null);
     try {
       const stored = brokerService.getAngelOneCredentials();
       const apiKey = angelApiKey.trim() || stored?.apiKey || '';
@@ -104,7 +108,7 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
 
       if (!apiKey || !clientCode) {
         setLoading(false);
-        setMsg({ type: 'error', text: 'Both SmartAPI Key and Client Code are required.' });
+        setAngelInlineMsg({ type: 'error', text: 'Both SmartAPI Key and Client Code are required.' });
         return;
       }
 
@@ -117,10 +121,12 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
       // Validate that the user has provided either direct JWT, or PIN + TOTP, or an active session token
       if (!effectiveJwt && (!pwd || !totp)) {
         setLoading(false);
-        setMsg({
+        setAngelInlineMsg({
           type: 'error',
-          text: 'Please enter your Account PIN & 6-digit Authenticator OTP, then click "⚡ Generate JWT Token" above.'
+          text: 'PIN & OTP Required to Connect',
+          details: 'Please enter your Account PIN & 6-digit Authenticator OTP, then click "⚡ Generate JWT Token" above, or enter an active JWT token.'
         });
+        totpInputRef.current?.focus();
         return;
       }
 
@@ -134,20 +140,25 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
       setLoading(false);
       if (res.success) {
         setMsg({ type: 'success', text: res.message || 'Connected to Angel One SmartAPI Live Feed!' });
+        setAngelInlineMsg({ type: 'success', text: '✓ Connected to Angel One Live Market Feed!', details: 'Real-time Nifty 50 quotes are active.' });
         onSelectBroker('angelone');
         fetchStatus();
       } else {
         setMsg({ type: 'error', text: res.message || 'Failed to connect with Angel One credentials' });
+        setAngelInlineMsg({ type: 'error', text: 'Connection probe failed', details: res.message });
         fetchStatus();
       }
     } catch (err: any) {
       setLoading(false);
-      setMsg({ type: 'error', text: err.message || 'Server error' });
+      const text = err.message || 'Server error';
+      setMsg({ type: 'error', text });
+      setAngelInlineMsg({ type: 'error', text: 'Error connecting to Angel One', details: text });
       fetchStatus();
     }
   };
 
   const handleGenerateJwtToken = async () => {
+    setAngelInlineMsg(null);
     const stored = brokerService.getAngelOneCredentials();
     const key = (angelApiKey.trim() && !angelApiKey.includes('*'))
       ? angelApiKey.trim()
@@ -159,25 +170,37 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
     const totp = angelTotp.trim() || (stored?.totp && !/^\d{6}$/.test(stored.totp.trim()) ? stored.totp : '');
 
     if (!key || key.includes('*')) {
-      setMsg({ type: 'error', text: 'Please enter your full SmartAPI Key (e.g. FegEW9WP).' });
+      setAngelInlineMsg({ type: 'error', text: 'Please enter your full SmartAPI Key (e.g. FegEW9WP).' });
       return;
     }
     if (!client || client.includes('*')) {
-      setMsg({ type: 'error', text: 'Please enter your full Client Code (e.g. AAAF337345).' });
+      setAngelInlineMsg({ type: 'error', text: 'Please enter your full Client Code (e.g. AAAF337345).' });
       return;
     }
     if (!pwd) {
-      setMsg({ type: 'error', text: 'Please enter your 4-digit Account PIN.' });
+      setAngelInlineMsg({ type: 'error', text: 'Please enter your 4-digit Account PIN.' });
       return;
     }
     if (!totp) {
-      setMsg({ type: 'error', text: 'Please enter your TOTP Key or current 6-digit Authenticator OTP from your phone.' });
+      setAngelInlineMsg({
+        type: 'error',
+        text: '⚠️ 6-Digit Authenticator OTP Required',
+        details: 'Open Google Authenticator on your phone (SmartAPI), type the current 6-digit code into the TOTP box above, and click "⚡ Generate JWT Token" before the timer expires.'
+      });
+      totpInputRef.current?.focus();
       return;
     }
 
     setGeneratingJwt(true);
     setMsg(null);
+    setAngelInlineMsg({
+      type: 'info',
+      text: 'Contacting Angel One SmartAPI auth endpoint...',
+      details: `Authenticating client ${client} with PIN and OTP...`
+    });
+
     try {
+      console.log('[AngelOne UI] Requesting JWT session token generation for:', client);
       const res = await api.generateAngelOneJwt({
         apiKey: key,
         clientCode: client,
@@ -185,6 +208,8 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
         totp,
       });
       setGeneratingJwt(false);
+      console.log('[AngelOne UI] Generation result:', res);
+
       if (res.success && res.jwtToken) {
         setAngelJwtToken(res.jwtToken);
         setGeneratedJwtInfo({
@@ -192,9 +217,10 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
           feedToken: res.feedToken,
           time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }),
         });
-        setMsg({
+        setAngelInlineMsg({
           type: 'success',
-          text: '✓ Fresh Angel One JWT Session Token generated! Connecting live feed...',
+          text: '✓ Fresh Angel One JWT Session Token Generated!',
+          details: 'Verifying session and connecting to live market feed...'
         });
 
         // Automatically save credentials and connect immediately
@@ -211,23 +237,46 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
             type: 'success',
             text: '✓ Connected to Angel One Live Feed with fresh session token!',
           });
+          setAngelInlineMsg({
+            type: 'success',
+            text: '✓ Live Market Feed Connected Successfully!',
+            details: 'NIFTY 50 live quotes and real option chain streaming in real time.'
+          });
           onSelectBroker('angelone');
         } else {
           setMsg({
             type: 'error',
             text: connectRes.message || 'Token generated, but connection probe failed.',
           });
+          setAngelInlineMsg({
+            type: 'error',
+            text: 'Token Generated but Connection Probe Failed',
+            details: connectRes.message || 'Server probe returned error'
+          });
         }
         fetchStatus();
       } else {
+        const errorText = res.message || 'Failed to generate JWT token from Angel One. Please check your PIN and OTP.';
         setMsg({
           type: 'error',
-          text: res.message || 'Failed to generate JWT token from Angel One. Please check your PIN and OTP.',
+          text: errorText,
+        });
+        setAngelInlineMsg({
+          type: 'error',
+          text: 'JWT Token Generation Failed',
+          details: errorText,
         });
       }
     } catch (e: any) {
       setGeneratingJwt(false);
-      setMsg({ type: 'error', text: e.message || 'Network error while generating JWT token.' });
+      const errText = e.message || 'Network error while generating JWT token.';
+      console.error('[AngelOne UI] JWT Generation error:', e);
+      setMsg({ type: 'error', text: errText });
+      setAngelInlineMsg({
+        type: 'error',
+        text: 'Network / Auth Error',
+        details: errText,
+      });
     }
   };
 
@@ -439,24 +488,85 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
               </div>
 
               <div>
-                <label className="text-[10px] text-slate-300 font-semibold block mb-1">
-                  TOTP SECRET KEY / 6-DIGIT CODE <span className="text-amber-400 font-normal">(Required for Auto-Login)</span>
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10px] text-slate-300 font-semibold block">
+                    AUTHENTICATOR OTP (6-DIGIT) / TOTP SECRET KEY
+                  </label>
+                  {/^\d{6}$/.test(angelTotp.trim()) ? (
+                    <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1 font-semibold">
+                      <Check className="h-3 w-3" /> 6-Digit OTP Ready
+                    </span>
+                  ) : angelTotp.trim().length >= 16 ? (
+                    <span className="text-[10px] text-blue-400 font-mono flex items-center gap-1 font-semibold">
+                      <Check className="h-3 w-3" /> Permanent Key Ready
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-amber-400 flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" /> Required for Token
+                    </span>
+                  )}
+                </div>
                 <input
-                  type={showAngelSecret ? 'text' : 'password'}
+                  ref={totpInputRef}
+                  type="text"
                   value={angelTotp}
-                  onChange={(e) => setAngelTotp(e.target.value)}
-                  placeholder="Paste permanent TOTP Secret Key (recommended) or 6-digit OTP"
-                  className="w-full rounded-lg border border-terminal-700 bg-terminal-850 px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
+                  onChange={(e) => {
+                    setAngelTotp(e.target.value);
+                    if (angelInlineMsg) setAngelInlineMsg(null);
+                  }}
+                  placeholder="Enter current 6-digit OTP (e.g. 123456) or paste permanent Secret Key"
+                  className={`w-full rounded-lg border bg-terminal-850 px-3 py-2 text-white font-mono text-xs focus:outline-none transition-colors ${
+                    angelInlineMsg?.type === 'error' && !angelTotp.trim()
+                      ? 'border-rose-500 ring-1 ring-rose-500'
+                      : 'border-terminal-700 focus:border-blue-500'
+                  }`}
                 />
-                <p className="text-[10px] text-slate-400 mt-1">
-                  💡 <strong>Tip:</strong> Paste your permanent <strong>TOTP Secret Key</strong> from{' '}
-                  <a href="https://smartapi.angelone.in/enable-totp" target="_blank" rel="noreferrer" className="text-blue-400 underline">
-                    smartapi.angelone.in/enable-totp
-                  </a>{' '}
-                  so the app auto-generates OTPs and you never have to re-enter codes. If using a 6-digit code, submit before it expires.
-                </p>
+                <div className="mt-1.5 flex items-center justify-between text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => setShowTotpGuide(!showTotpGuide)}
+                    className="text-blue-400 hover:text-blue-300 flex items-center gap-1 underline cursor-pointer"
+                  >
+                    <HelpCircle className="h-3 w-3" />
+                    {showTotpGuide ? 'Hide TOTP setup guide' : 'Where to get SmartAPI Authenticator OTP?'}
+                  </button>
+                </div>
+                {showTotpGuide && (
+                  <div className="mt-2 p-2.5 rounded bg-terminal-900 border border-terminal-700 text-[10px] text-slate-300 space-y-1 leading-relaxed">
+                    <p className="font-semibold text-white">How to enable SmartAPI TOTP (1-minute setup):</p>
+                    <p>1. Open <a href="https://smartapi.angelone.in/enable-totp" target="_blank" rel="noreferrer" className="text-blue-400 underline font-semibold">smartapi.angelone.in/enable-totp</a> in your browser.</p>
+                    <p>2. Enter your Client Code (<code className="text-amber-300">AAAF337345</code>) and PIN (<code className="text-amber-300">7787</code>), then enter the mobile OTP.</p>
+                    <p>3. Scan the QR code with <strong>Google Authenticator</strong> on your phone.</p>
+                    <p>4. Enter the 6-digit code shown in Google Authenticator into the box above, then click <strong>⚡ Generate JWT Token</strong>!</p>
+                  </div>
+                )}
               </div>
+
+              {angelInlineMsg && (
+                <div className={`p-3 rounded-lg border text-xs flex items-start gap-2.5 transition-all ${
+                  angelInlineMsg.type === 'success'
+                    ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300'
+                    : angelInlineMsg.type === 'info'
+                    ? 'bg-blue-500/10 border-blue-500/40 text-blue-300'
+                    : 'bg-rose-500/15 border-rose-500/50 text-rose-200'
+                }`}>
+                  {angelInlineMsg.type === 'success' ? (
+                    <Check className="h-4 w-4 shrink-0 text-emerald-400 mt-0.5" />
+                  ) : angelInlineMsg.type === 'info' ? (
+                    <RefreshCw className="h-4 w-4 shrink-0 animate-spin text-blue-400 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 shrink-0 text-rose-400 mt-0.5" />
+                  )}
+                  <div className="flex-1">
+                    <div className="font-semibold text-[11px]">{angelInlineMsg.text}</div>
+                    {angelInlineMsg.details && (
+                      <div className="mt-1 text-[10px] opacity-90 leading-relaxed font-normal">
+                        {angelInlineMsg.details}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="pt-2 border-t border-terminal-800">
                 <div className="flex items-center justify-between mb-1">
@@ -518,18 +628,33 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
                   )}
                 </div>
 
-                {generatedJwtInfo && (
-                  <div className="mt-1.5 p-2 rounded bg-emerald-950/30 border border-emerald-500/30 text-[10px] text-emerald-300 flex items-center justify-between">
-                    <span className="flex items-center gap-1">
-                      <Check className="h-3 w-3 text-emerald-400" />
-                      Fresh Session Token Active ({generatedJwtInfo.time})
-                    </span>
-                    <span className="font-mono text-[9px] text-slate-400">{generatedJwtInfo.jwt.length} characters</span>
-                  </div>
-                )}
+                {angelJwtToken && (() => {
+                  const info = getJwtExpiryInfo(angelJwtToken);
+                  if (info.valid) {
+                    return (
+                      <div className="mt-1.5 flex items-center justify-between px-2.5 py-1.5 rounded bg-emerald-950/40 border border-emerald-500/30 text-[10px] text-emerald-300">
+                        <span className="flex items-center gap-1.5 font-medium">
+                          <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                          Active Session Token • Expires at {info.expiresAtFormatted} ({info.minutesLeft}m remaining)
+                        </span>
+                        <span className="font-mono text-[9px] text-slate-400">{angelJwtToken.length} chars</span>
+                      </div>
+                    );
+                  } else if (info.isExpired) {
+                    return (
+                      <div className="mt-1.5 flex items-center justify-between px-2.5 py-1.5 rounded bg-amber-950/40 border border-amber-500/30 text-[10px] text-amber-300">
+                        <span className="flex items-center gap-1.5">
+                          <AlertCircle className="h-3.5 w-3.5 text-amber-400" />
+                          Session Expired for today. Enter a fresh 6-digit OTP above and click "⚡ Generate JWT Token".
+                        </span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
 
                 <p className="text-[10px] text-slate-400 mt-1">
-                  💡 <strong>One-Click Generation:</strong> Fill your PIN &amp; TOTP above, then click <strong>⚡ Generate JWT Token</strong> to fetch and populate your session token instantly without leaving this page.
+                  💡 <strong>One-Click Generation:</strong> Enter your 6-digit OTP above, then click <strong>⚡ Generate JWT Token</strong> to fetch and populate your session token instantly without leaving this page.
                 </p>
               </div>
 

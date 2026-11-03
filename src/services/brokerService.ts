@@ -70,16 +70,59 @@ export function isJwtExpired(token: string): boolean {
   }
 }
 
-// Strictly identifies the NIFTY 50 Index record and prevents option contracts from being treated as index
+export interface JwtExpiryInfo {
+  valid: boolean;
+  isExpired: boolean;
+  expiresAtFormatted?: string;
+  minutesLeft?: number;
+  clientCode?: string;
+}
+
+export function getJwtExpiryInfo(token: string): JwtExpiryInfo {
+  if (!token || typeof token !== 'string') return { valid: false, isExpired: false };
+  try {
+    const clean = cleanAngelJwt(token);
+    const parts = clean.split('.');
+    if (parts.length !== 3) return { valid: false, isExpired: false };
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const jsonStr = atob(base64);
+    const payload = JSON.parse(jsonStr);
+    const clientCode = payload.username || payload.clientcode;
+    if (!payload.exp) return { valid: true, isExpired: false, clientCode };
+
+    const expDate = new Date(payload.exp * 1000);
+    const nowMs = Date.now();
+    const diffMs = expDate.getTime() - nowMs;
+    const minutesLeft = Math.floor(diffMs / 60000);
+    const isExpired = diffMs <= 0;
+
+    return {
+      valid: !isExpired,
+      isExpired,
+      expiresAtFormatted: expDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
+      minutesLeft: Math.max(0, minutesLeft),
+      clientCode,
+    };
+  } catch {
+    return { valid: false, isExpired: false };
+  }
+}
+
+// Strictly identifies the NIFTY 50 Index record and prevents option contracts or dummy scrips from being treated as index
 function isNiftyIndex(q: any): boolean {
   if (!q) return false;
   const token = String(q.symbolToken || q.token || '').trim();
   const exchange = String(q.exchange || '').toUpperCase().trim();
   const sym = String(q.tradingSymbol || q.tradingsymbol || q.symbol || '').toUpperCase().trim();
 
-  // 1. Explicit Index Token match (Angel One official index tokens)
-  if (token === '99926000' || token === '26000') {
+  // 1. Explicit Index Token match (99926000 is official Angel One NIFTY 50 AMXIDX token)
+  if (token === '99926000') {
     return true;
+  }
+
+  // Reject dummy token 26000 which returns erroneous LTP
+  if (token === '26000') {
+    return false;
   }
 
   // 2. Options are always on NFO and end with CE or PE -> strictly NEVER the index
@@ -88,12 +131,12 @@ function isNiftyIndex(q: any): boolean {
   }
 
   // 3. Exact symbol match on NSE cash/index segment
-  if (sym === 'NIFTY 50' || sym === 'NIFTY' || sym === 'NIFTY-I' || sym === 'NIFTY INDEX') {
+  if (sym === 'NIFTY 50' || sym === 'NIFTY-I' || sym === 'NIFTY INDEX') {
     return true;
   }
 
   // 4. Any item from NSE exchange that does not look like an equity stock or option
-  if (exchange === 'NSE' && sym.startsWith('NIFTY') && !/\d{4,}/.test(sym)) {
+  if (exchange === 'NSE' && sym === 'NIFTY' && !/\d{4,}/.test(sym)) {
     return true;
   }
 
@@ -443,7 +486,7 @@ class BrokerService {
             {
               mode: 'FULL',
               exchangeTokens: {
-                NSE: ['99926000', '26000']
+                NSE: ['99926000']
               }
             },
             {
@@ -479,7 +522,7 @@ class BrokerService {
               const idxRec = probeItems.find(q => isNiftyIndex(q));
               if (idxRec) {
                 const ltp = Number(idxRec.ltp ?? idxRec.lastPrice ?? idxRec.close ?? 0);
-                if (ltp > 0) {
+                if (ltp > 10000) {
                   const open = Number(idxRec.open ?? ltp);
                   const high = Number(idxRec.high ?? ltp);
                   const low = Number(idxRec.low ?? ltp);
@@ -614,26 +657,35 @@ class BrokerService {
       };
     }
 
+    const cleanClient = clientCode.trim().toUpperCase();
+    const cleanKey = apiKey.trim();
+    const cleanPwd = password.trim();
+    const cleanTotpInput = totp.trim();
+
+    console.log('[AngelOne SmartAPI] Initiating JWT Token generation for client:', cleanClient);
+
     try {
-      const totpCode = await generateTOTP(totp.trim());
+      const totpCode = await generateTOTP(cleanTotpInput);
       if (!totpCode || !/^\d{6}$/.test(totpCode)) {
+        console.warn('[AngelOne SmartAPI] Invalid TOTP code computed:', totpCode);
         return {
           success: false,
-          message: 'Failed to compute a valid 6-digit TOTP code. Verify your TOTP Key or enter a fresh 6-digit OTP.',
+          message: 'Failed to compute a valid 6-digit TOTP code. Verify your TOTP Key or enter a fresh 6-digit OTP from your authenticator app.',
         };
       }
 
+      console.log('[AngelOne SmartAPI] Sending login request to SmartAPI auth endpoint...');
       const loginUrl = '/api/angelone/rest/auth/angelbroking/user/v1/loginByPassword';
       const loginRes = await axios.post(
         loginUrl,
         {
-          clientcode: clientCode.trim().toUpperCase(),
-          password: password.trim(),
+          clientcode: cleanClient,
+          password: cleanPwd,
           totp: totpCode,
         },
         {
           headers: {
-            'X-PrivateKey': apiKey.trim(),
+            'X-PrivateKey': cleanKey,
             'Content-Type': 'application/json',
             'Accept': 'application/json',
             'X-SourceID': 'WEB',
@@ -643,9 +695,11 @@ class BrokerService {
             'X-MACaddress': 'fe80::1',
             'X-UserType': 'USER',
           },
-          timeout: 10000,
+          timeout: 12000,
         }
       );
+
+      console.log('[AngelOne SmartAPI] Login response status:', loginRes.data?.status, loginRes.data);
 
       if (loginRes.data?.status === true && loginRes.data?.data) {
         const cleanJwt = cleanAngelJwt(loginRes.data.data.jwtToken);
@@ -660,19 +714,28 @@ class BrokerService {
           message: 'Angel One JWT Session Token generated successfully!',
         };
       } else {
-        let errMsg = 'Failed to generate JWT token from Angel One.';
         const d = loginRes.data;
-        if (typeof d === 'string') {
+        const errCode = d?.errorcode || d?.errorCode || '';
+        let errMsg = 'Failed to generate JWT token from Angel One.';
+
+        if (errCode === 'AB1050') {
+          errMsg = 'Invalid TOTP / Client combination (AB1050). Please verify: 1) Use the 6-digit code from Google Authenticator registered with SmartAPI (smartapi.angelone.in/enable-totp). 2) Enter a fresh code before the 30-second timer expires. 3) Or paste your permanent TOTP Secret Key.';
+        } else if (errCode === 'AB1010') {
+          errMsg = 'Invalid Account PIN (AB1010). Please verify your 4-digit demat trading PIN.';
+        } else if (typeof d === 'string') {
           errMsg = d;
         } else if (d?.message) {
-          errMsg = d.errorcode ? `${d.message} (${d.errorcode})` : d.message;
+          errMsg = errCode ? `${d.message} (${errCode})` : d.message;
         }
+
+        console.error('[AngelOne SmartAPI] Login rejected:', errMsg);
         return {
           success: false,
           message: errMsg,
         };
       }
     } catch (err: any) {
+      console.error('[AngelOne SmartAPI] Login network error:', err);
       const raw = err.response?.data;
       let msg = err.message || 'Network error while generating JWT token';
       if (typeof raw === 'string') {
@@ -773,12 +836,12 @@ class BrokerService {
       const quoteUrl = '/api/angelone/rest/secure/angelbroking/market/v1/quote';
 
       const exp = this.selectedExpiry || angelScripService.getNearestExpiry();
-      const nfoTokens = angelScripService.getAtmTokens(this.spotPrice || 23050, exp, 8);
+      const nfoTokens = angelScripService.getAtmTokens(this.spotPrice || 23450, exp, 8);
 
       const payload: any = {
         mode: 'FULL',
         exchangeTokens: {
-          NSE: ['99926000', '26000'],
+          NSE: ['99926000'],
         }
       };
 
@@ -839,7 +902,7 @@ class BrokerService {
         const indexRecord = items.find(q => isNiftyIndex(q));
         if (indexRecord) {
           const ltp = Number(indexRecord.ltp ?? indexRecord.lastPrice ?? indexRecord.close ?? 0);
-          if (ltp > 0) {
+          if (ltp > 10000) {
             const open = Number(indexRecord.open ?? ltp);
             const high = Number(indexRecord.high ?? ltp);
             const low = Number(indexRecord.low ?? ltp);
@@ -890,7 +953,6 @@ class BrokerService {
               isStale: false,
             };
             this.ticksMap.set('99926000', idxTick);
-            this.ticksMap.set('26000', idxTick);
             this.ticksMap.set('NIFTY 50', idxTick);
             this.ticksMap.set('NIFTY', idxTick);
           }

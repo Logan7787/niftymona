@@ -81,7 +81,7 @@ export const OptionPrediction: React.FC<OptionPredictionProps> = ({
     return PredictionEngine.generateMarketPredictions(optionChain, underlying, indicators);
   }, [optionChain, underlying, indicators]);
 
-  const atmStrike = underlying?.atmStrike || 23050;
+  const atmStrike = underlying?.atmStrike || 23450;
 
   // Filter predictions
   const filteredPredictions = useMemo(() => {
