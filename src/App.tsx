@@ -185,8 +185,7 @@ function MainTerminal() {
         {activePage === 'broker-settings' && (
           <BrokerSettings
             activeProvider={market.activeProvider}
-            onSelectBroker={(provider) => {
-              market.selectBroker(provider);
+            onSelectBroker={(_provider) => {
               market.manualRefresh();
             }}
           />

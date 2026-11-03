@@ -63,6 +63,9 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
 
   useEffect(() => {
     fetchStatus();
+    const unsub = brokerService.subscribe(() => {
+      fetchStatus();
+    });
     const savedAngel = brokerService.getAngelOneCredentials();
     if (savedAngel) {
       if (savedAngel.clientCode && !savedAngel.clientCode.includes('*')) {
@@ -91,6 +94,9 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
       if (savedUpstox.apiSecret) setUpstoxApiSecret(savedUpstox.apiSecret);
       if (savedUpstox.accessToken) setUpstoxAccessToken(savedUpstox.accessToken);
     }
+    return () => {
+      unsub();
+    };
   }, []);
 
   const handleSaveAngelOne = async (e: React.FormEvent) => {
@@ -334,6 +340,23 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
   const handleSwitchProvider = async (provider: BrokerProvider) => {
     setLoading(true);
     setMsg(null);
+    if (provider === 'angelone') {
+      const creds = brokerService.getAngelOneCredentials();
+      if (!creds?.jwtToken && !creds?.totp) {
+        setLoading(false);
+        setMsg({
+          type: 'error',
+          text: 'Angel One requires a fresh JWT session token. Please enter your 6-digit Authenticator OTP below and click "⚡ Generate JWT Token".'
+        });
+        setAngelInlineMsg({
+          type: 'error',
+          text: 'JWT Session Token Required',
+          details: 'Enter your 6-digit Authenticator OTP below and click "⚡ Generate JWT Token" to start the live market feed.'
+        });
+        totpInputRef.current?.focus();
+        return;
+      }
+    }
     const res = await api.selectBroker(provider);
     if (res && !res.success) {
       setMsg({ type: 'error', text: res.message || `Failed to activate ${provider}` });

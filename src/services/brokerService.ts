@@ -482,41 +482,33 @@ class BrokerService {
           try {
           const authHeader = `Bearer ${cleanJwt}`;
           const probeRes = await axios.post(
-            '/api/angelone/rest/secure/angelbroking/market/v1/quote',
+            '/api/angelone-quote',
             {
-              mode: 'FULL',
-              exchangeTokens: {
-                NSE: ['99926000']
-              }
+              apiKey: creds.apiKey,
+              jwtToken: cleanJwt,
+              payload: {
+                mode: 'FULL',
+                exchangeTokens: {
+                  NSE: ['99926000']
+                }
+              },
+              clientPublicIp: '223.178.85.220',
             },
             {
-              headers: {
-                'Authorization': authHeader,
-                'X-PrivateKey': creds.apiKey,
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'X-SourceID': 'WEB',
-                'X-ClientLocalIP': '127.0.0.1',
-                'X-ClientPublicIP': '223.178.85.220',
-                'X-MACAddress': '02:00:00:00:00:00',
-                'X-UserType': 'USER',
-              },
-              timeout: 8000,
+              timeout: 10000,
             }
           );
           const isProbeSuccess =
             probeRes.data &&
-            typeof probeRes.data === 'object' &&
-            probeRes.data.status !== false &&
-            probeRes.data.success !== false &&
-            (probeRes.data.status === true || Array.isArray(probeRes.data.data?.fetched));
+            probeRes.data.success === true &&
+            Array.isArray(probeRes.data?.data?.fetched);
 
           if (isProbeSuccess) {
             isAuthenticated = true;
             this.saveAngelOneCredentials(creds);
 
             // Immediately parse live index quote from probe response to update spot price instantly
-            const probeItems = probeRes.data?.data?.fetched;
+            const probeItems = probeRes.data.data.fetched;
             if (Array.isArray(probeItems) && probeItems.length > 0) {
               const idxRec = probeItems.find(q => isNiftyIndex(q));
               if (idxRec) {
@@ -776,46 +768,32 @@ class BrokerService {
       }
 
       const res = await axios.post(
-        quoteUrl,
-        payload,
+        '/api/angelone-quote',
         {
-          headers: {
-            'Authorization': authHeader,
-            'X-PrivateKey': creds.apiKey,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'X-SourceID': 'WEB',
-            'X-ClientLocalIP': '127.0.0.1',
-            'X-ClientPublicIP': '223.178.85.220',
-            'X-MACAddress': '02:00:00:00:00:00',
-            'X-UserType': 'USER',
-          },
-          timeout: 8000,
+          apiKey: creds.apiKey,
+          jwtToken: jwt,
+          payload,
+          clientPublicIp: '223.178.85.220',
+        },
+        {
+          timeout: 10000,
         }
       );
 
-      // Handle unexpected non-JSON response (e.g. gateway error)
-      if (!res.data || typeof res.data !== 'object') {
-        console.warn('[AngelOne] Received non-JSON response from quote endpoint:', typeof res.data);
-        return;
-      }
-
-      // Handle business error responses returned with HTTP 200
-      if (res.data?.status === false || res.data?.success === false) {
-        const code = res.data?.errorcode || res.data?.errorCode;
-        const msg = res.data?.message || 'Quote fetch failed';
-        if (code === 'AG8001' || msg.toLowerCase().includes('token') || msg.toLowerCase().includes('session')) {
+      // Handle serverless or broker-level error
+      if (!res.data || res.data.success !== true) {
+        if (res.data?.expired) {
           if (creds.password && creds.totp) {
-            console.log('[AngelOne] Session expired (AG8001), auto-renewing session...');
+            console.log('[AngelOne] Session expired, auto-renewing session...');
             const renewed = await this.reloginAngelOne(creds);
             if (renewed) return;
           }
           this.connectionStatus = 'token_expired';
-          this.statusMessage = 'Angel One JWT session token expired (AG8001). Please re-authenticate in Broker Settings.';
+          this.statusMessage = 'Angel One JWT session token expired. Please re-authenticate in Broker Settings.';
           this.notifyListeners();
           return;
         }
-        console.warn('[AngelOne] Quote API returned error:', msg);
+        console.warn('[AngelOne] Quote API returned error:', res.data?.message || res.data);
         return;
       }
 
