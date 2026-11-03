@@ -52,14 +52,33 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
     fetchStatus();
     const savedAngel = brokerService.getAngelOneCredentials();
     if (savedAngel) {
-      if (savedAngel.clientCode) setAngelClientCode(savedAngel.clientCode);
-      if (savedAngel.apiKey) setAngelApiKey(savedAngel.apiKey);
-      if (savedAngel.password) setAngelPassword(savedAngel.password);
+      if (savedAngel.clientCode && !savedAngel.clientCode.includes('*')) {
+        setAngelClientCode(savedAngel.clientCode);
+      } else {
+        setAngelClientCode('AAAF337345');
+      }
+
+      if (savedAngel.apiKey && !savedAngel.apiKey.includes('*')) {
+        setAngelApiKey(savedAngel.apiKey);
+      } else {
+        setAngelApiKey('FegEW9WP');
+      }
+
+      if (savedAngel.password) {
+        setAngelPassword(savedAngel.password);
+      } else {
+        setAngelPassword('7787');
+      }
+
       // Pre-fill TOTP only if it's a permanent base32 secret key (not a transient 6-digit OTP)
       if (savedAngel.totp && !/^\d{6}$/.test(savedAngel.totp.trim())) {
         setAngelTotp(savedAngel.totp);
       }
       if (savedAngel.jwtToken) setAngelJwtToken(savedAngel.jwtToken);
+    } else {
+      setAngelApiKey('FegEW9WP');
+      setAngelClientCode('AAAF337345');
+      setAngelPassword('7787');
     }
     const savedUpstox = brokerService.getUpstoxCredentials();
     if (savedUpstox) {
@@ -122,25 +141,30 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
   };
 
   const handleGenerateJwtToken = async () => {
-    const key = angelApiKey.trim() || brokerData?.providers?.angelone?.apiKey;
-    const client = angelClientCode.trim() || brokerData?.providers?.angelone?.clientCode;
-    const pwd = angelPassword.trim();
-    const totp = angelTotp.trim();
+    const stored = brokerService.getAngelOneCredentials();
+    const key = (angelApiKey.trim() && !angelApiKey.includes('*'))
+      ? angelApiKey.trim()
+      : (stored?.apiKey && !stored.apiKey.includes('*') ? stored.apiKey : 'FegEW9WP');
+    const client = (angelClientCode.trim() && !angelClientCode.includes('*'))
+      ? angelClientCode.trim().toUpperCase()
+      : (stored?.clientCode && !stored.clientCode.includes('*') ? stored.clientCode.toUpperCase() : 'AAAF337345');
+    const pwd = angelPassword.trim() || stored?.password || '7787';
+    const totp = angelTotp.trim() || (stored?.totp && !/^\d{6}$/.test(stored.totp.trim()) ? stored.totp : '');
 
-    if (!key || key === 'Not configured') {
-      setMsg({ type: 'error', text: 'SmartAPI Key is required to generate a JWT token.' });
+    if (!key || key.includes('*')) {
+      setMsg({ type: 'error', text: 'Please enter your full SmartAPI Key (e.g. FegEW9WP).' });
       return;
     }
-    if (!client || client === 'Not configured') {
-      setMsg({ type: 'error', text: 'Client Code is required to generate a JWT token.' });
+    if (!client || client.includes('*')) {
+      setMsg({ type: 'error', text: 'Please enter your full Client Code (e.g. AAAF337345).' });
       return;
     }
     if (!pwd) {
-      setMsg({ type: 'error', text: 'Account Password / PIN is required to generate a JWT token.' });
+      setMsg({ type: 'error', text: 'Please enter your 4-digit Account PIN.' });
       return;
     }
     if (!totp) {
-      setMsg({ type: 'error', text: 'TOTP Secret Key or a current 6-digit OTP is required to generate a JWT token.' });
+      setMsg({ type: 'error', text: 'Please enter your TOTP Key or current 6-digit Authenticator OTP from your phone.' });
       return;
     }
 
@@ -163,12 +187,35 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
         });
         setMsg({
           type: 'success',
-          text: '✓ Fresh Angel One JWT Session Token generated & populated successfully!',
+          text: '✓ Fresh Angel One JWT Session Token generated! Connecting live feed...',
         });
+
+        // Automatically save credentials and connect immediately
+        const connectRes = await api.saveAngelOneCredentials({
+          apiKey: key,
+          clientCode: client,
+          password: pwd,
+          totp: /^\d{6}$/.test(totp) ? undefined : totp,
+          jwtToken: res.jwtToken,
+        });
+
+        if (connectRes.success) {
+          setMsg({
+            type: 'success',
+            text: '✓ Connected to Angel One Live Feed with fresh session token!',
+          });
+          onSelectBroker('angelone');
+        } else {
+          setMsg({
+            type: 'error',
+            text: connectRes.message || 'Token generated, but connection probe failed.',
+          });
+        }
+        fetchStatus();
       } else {
         setMsg({
           type: 'error',
-          text: res.message || 'Failed to generate JWT token from Angel One.',
+          text: res.message || 'Failed to generate JWT token from Angel One. Please check your PIN and OTP.',
         });
       }
     } catch (e: any) {
@@ -439,15 +486,28 @@ export const BrokerSettings: React.FC<BrokerSettingsProps> = ({ activeProvider, 
                     className="w-full rounded-lg border border-terminal-700 bg-terminal-850 px-3 py-2 pr-16 text-white font-mono text-[11px] focus:border-blue-500 focus:outline-none"
                   />
                   {angelJwtToken && (
-                    <button
-                      type="button"
-                      onClick={copyJwtToClipboard}
-                      className="absolute right-2 top-2 px-2 py-1 rounded bg-terminal-700/90 hover:bg-terminal-600 text-slate-200 hover:text-white text-[10px] flex items-center gap-1 cursor-pointer transition-colors border border-terminal-600 shadow-sm"
-                      title="Copy JWT Token to clipboard"
-                    >
-                      {copiedJwt ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
-                      <span>{copiedJwt ? 'Copied' : 'Copy'}</span>
-                    </button>
+                    <div className="absolute right-2 top-2 flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAngelJwtToken('');
+                          setGeneratedJwtInfo(null);
+                        }}
+                        className="px-2 py-1 rounded bg-rose-950/60 hover:bg-rose-900 text-rose-300 text-[10px] cursor-pointer transition-colors border border-rose-800"
+                        title="Clear expired/stale JWT Token"
+                      >
+                        Clear
+                      </button>
+                      <button
+                        type="button"
+                        onClick={copyJwtToClipboard}
+                        className="px-2 py-1 rounded bg-terminal-700/90 hover:bg-terminal-600 text-slate-200 hover:text-white text-[10px] flex items-center gap-1 cursor-pointer transition-colors border border-terminal-600 shadow-sm"
+                        title="Copy JWT Token to clipboard"
+                      >
+                        {copiedJwt ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                        <span>{copiedJwt ? 'Copied' : 'Copy'}</span>
+                      </button>
+                    </div>
                   )}
                 </div>
 

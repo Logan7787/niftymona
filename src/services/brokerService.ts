@@ -487,9 +487,11 @@ class BrokerService {
             }
           } else {
             console.warn('[AngelOne] Direct JWT token probe rejected by server:', probeRes.data?.message || probeRes.data);
+            creds.jwtToken = undefined;
           }
         } catch (probeErr: any) {
           console.warn('[AngelOne] Direct JWT token probe error:', probeErr?.response?.data || probeErr?.message);
+          creds.jwtToken = undefined;
         }
       }
 
@@ -540,10 +542,8 @@ class BrokerService {
             }
             throw new Error(errMsg);
           }
-        } else if (!creds.jwtToken) {
-          throw new Error('Please enter Account PIN & TOTP (or a direct JWT session token) to connect Angel One.');
         } else {
-          throw new Error('Direct JWT Session Token is invalid or expired (AG8001). Please paste a fresh JWT token from SmartAPI.');
+          throw new Error('Your Angel One session has expired for today. Please enter your 6-digit Authenticator OTP in Broker Settings and click "⚡ Generate JWT Token".');
         }
       }
 
