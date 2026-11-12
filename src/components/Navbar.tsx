@@ -6,7 +6,8 @@
 import React from 'react';
 import { 
   LayoutDashboard, TableProperties, Target, LineChart, 
-  BellRing, Briefcase, History, KeyRound, Sliders, Radio, Eye, Sparkles 
+  BellRing, Briefcase, History, KeyRound, Sliders, Radio, Eye, Sparkles,
+  Layers, Coins
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -14,6 +15,8 @@ export type PageId =
   | 'dashboard' 
   | 'strike-monitor'
   | 'prediction'
+  | 'multi-index-prediction'
+  | 'penny-stocks'
   | 'option-chain' 
   | 'atm-analysis' 
   | 'charts' 
@@ -43,6 +46,8 @@ export const Navbar: React.FC<NavbarProps> = ({ activePage, onSelectPage, openTr
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'strike-monitor', label: 'Strike Monitor', icon: Eye },
     { id: 'prediction', label: 'Prediction', icon: Sparkles },
+    { id: 'multi-index-prediction', label: 'Multi-Index Prediction', icon: Layers },
+    { id: 'penny-stocks', label: 'Penny Stocks', icon: Coins },
     { id: 'option-chain', label: 'Live Option Chain', icon: TableProperties },
     { id: 'atm-analysis', label: 'ATM Strike Analysis', icon: Target },
     { id: 'charts', label: 'Technical Charts', icon: LineChart },

@@ -22,6 +22,8 @@ import { SignalsAlerts } from './pages/SignalsAlerts';
 import { PaperTrading } from './pages/PaperTrading';
 import { HistoricalAnalysis } from './pages/HistoricalAnalysis';
 import { OptionPrediction } from './pages/OptionPrediction';
+import { MultiIndexPrediction } from './pages/MultiIndexPrediction';
+import { PennyStocksPrediction } from './pages/PennyStocksPrediction';
 import { BrokerSettings } from './pages/BrokerSettings';
 import { GeneralSettings } from './pages/GeneralSettings';
 import { ConnectionDiagnostics } from './pages/ConnectionDiagnostics';
@@ -131,6 +133,22 @@ function MainTerminal() {
             indicators={market.indicators}
             onTradeClick={handleQuickTrade}
             onNavigateToChain={() => setActivePage('option-chain')}
+          />
+        )}
+
+        {activePage === 'multi-index-prediction' && (
+          <MultiIndexPrediction
+            liveNiftyUnderlying={market.underlying}
+            liveNiftyOptionChain={market.optionChain}
+            liveNiftyIndicators={market.indicators}
+            onTradeClick={handleQuickTrade}
+            onNavigateToChain={() => setActivePage('option-chain')}
+          />
+        )}
+
+        {activePage === 'penny-stocks' && (
+          <PennyStocksPrediction
+            onTradeClick={handleQuickTrade}
           />
         )}
 
