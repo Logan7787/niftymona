@@ -21,8 +21,19 @@ import {
   Sparkles, TrendingUp, TrendingDown, Target, ShieldAlert,
   Zap, Award, Compass, BarChart2, CheckCircle2, AlertTriangle,
   Filter, Search, Layers, ShieldCheck, ArrowRight, Activity,
-  Clock, Check, X, Shield
+  Clock, Check, X, Shield, ArrowUpDown
 } from 'lucide-react';
+
+const ACTION_PRIORITY: Record<string, number> = {
+  'STRONG_BUY': 1,
+  'BUY': 2,
+  'SELL_WRITE': 3,
+  'NEUTRAL': 4,
+  'AVOID': 5,
+};
+
+type SortField = 'action' | 'strike' | 'winProb' | 'ltp';
+type SortOrder = 'asc' | 'desc';
 
 interface MultiIndexPredictionProps {
   liveNiftyUnderlying: UnderlyingSnapshot | null;
@@ -42,6 +53,8 @@ export const MultiIndexPrediction: React.FC<MultiIndexPredictionProps> = ({
   const [selectedFilter, setSelectedFilter] = useState<'ALL' | 'BUY_CE' | 'BUY_PE' | 'NEAR_ATM' | 'HIGH_CONFIDENCE' | 'WRITERS'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedPrediction, setSelectedPrediction] = useState<StrikePrediction | null>(null);
+  const [sortBy, setSortBy] = useState<SortField>('action');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
   // Compute underlying, option chain, and predictions for the selected index
   const { underlying, predictions, summary } = useMemo(() => {
@@ -57,7 +70,19 @@ export const MultiIndexPrediction: React.FC<MultiIndexPredictionProps> = ({
   const atmStrike = underlying.atmStrike;
   const config = INDEX_CONFIGS[selectedIndex];
 
-  // Filter predictions
+  const handleSort = (field: SortField) => {
+    if (sortBy === field) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      // For action, 'asc' starts with STRONG_BUY (Priority 1)
+      // For winProb and ltp, default to 'desc' (highest first)
+      // For strike, default to 'asc'
+      setSortOrder(field === 'winProb' || field === 'ltp' ? 'desc' : 'asc');
+    }
+  };
+
+  // Filter and sort predictions
   const filteredPredictions = useMemo(() => {
     let list = [...predictions];
 
@@ -83,8 +108,33 @@ export const MultiIndexPrediction: React.FC<MultiIndexPredictionProps> = ({
         break;
     }
 
+    // Sort predictions (Default: Action -> Strong Buy, Buy, Sell Write, Neutral, Avoid)
+    list.sort((a, b) => {
+      if (sortBy === 'action') {
+        const pA = ACTION_PRIORITY[a.action] || 99;
+        const pB = ACTION_PRIORITY[b.action] || 99;
+        if (pA !== pB) {
+          return sortOrder === 'asc' ? pA - pB : pB - pA;
+        }
+        // Secondary sort: highest winProbability first
+        return b.winProbability - a.winProbability;
+      }
+      if (sortBy === 'winProb') {
+        return sortOrder === 'asc'
+          ? a.winProbability - b.winProbability
+          : b.winProbability - a.winProbability;
+      }
+      if (sortBy === 'ltp') {
+        return sortOrder === 'asc' ? a.ltp - b.ltp : b.ltp - a.ltp;
+      }
+      if (sortBy === 'strike') {
+        return sortOrder === 'asc' ? a.strike - b.strike : b.strike - a.strike;
+      }
+      return 0;
+    });
+
     return list;
-  }, [predictions, searchQuery, selectedFilter, atmStrike, config.strikeStep]);
+  }, [predictions, searchQuery, selectedFilter, atmStrike, config.strikeStep, sortBy, sortOrder]);
 
   const getBiasBadge = () => {
     if (!summary) return null;
@@ -444,15 +494,40 @@ export const MultiIndexPrediction: React.FC<MultiIndexPredictionProps> = ({
           ))}
         </div>
 
-        <div className="relative">
-          <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-          <input
-            type="text"
-            placeholder="Search Strike..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8 pr-3 py-1.5 rounded-lg bg-terminal-850 border border-terminal-700 text-slate-200 placeholder-slate-500 text-xs w-full sm:w-44 focus:outline-none focus:border-blue-500"
-          />
+        <div className="flex items-center gap-2">
+          {/* Quick Sort Selector */}
+          <div className="flex items-center gap-1.5 text-xs bg-terminal-850 border border-terminal-700 px-2.5 py-1.5 rounded-lg text-slate-300">
+            <ArrowUpDown className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+            <span className="text-slate-400 text-[11px]">Sort:</span>
+            <select
+              value={`${sortBy}-${sortOrder}`}
+              onChange={(e) => {
+                const [f, o] = e.target.value.split('-') as [SortField, SortOrder];
+                setSortBy(f);
+                setSortOrder(o);
+              }}
+              aria-label="Sort strikes by action, win probability, price or strike"
+              className="bg-transparent text-white font-bold text-xs focus:outline-none cursor-pointer"
+            >
+              <option value="action-asc" className="bg-terminal-900 text-emerald-400 font-bold">Model Action (Strong Buy First)</option>
+              <option value="winProb-desc" className="bg-terminal-900 text-white">Win Prob (High to Low)</option>
+              <option value="strike-asc" className="bg-terminal-900 text-white">Strike (Low to High)</option>
+              <option value="strike-desc" className="bg-terminal-900 text-white">Strike (High to Low)</option>
+              <option value="ltp-desc" className="bg-terminal-900 text-white">LTP (High to Low)</option>
+              <option value="action-desc" className="bg-terminal-900 text-slate-400">Model Action (Avoid / Neutral First)</option>
+            </select>
+          </div>
+
+          <div className="relative">
+            <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+            <input
+              type="text"
+              placeholder="Search Strike..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8 pr-3 py-1.5 rounded-lg bg-terminal-850 border border-terminal-700 text-slate-200 placeholder-slate-500 text-xs w-full sm:w-40 focus:outline-none focus:border-blue-500"
+            />
+          </div>
         </div>
       </div>
 
@@ -461,11 +536,59 @@ export const MultiIndexPrediction: React.FC<MultiIndexPredictionProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-left font-mono text-xs border-collapse">
             <thead>
-              <tr className="border-b border-terminal-800 bg-terminal-850 text-slate-400 text-[11px] uppercase tracking-wider">
-                <th className="py-2.5 px-3">Strike & Type</th>
-                <th className="py-2.5 px-3">LTP (₹)</th>
-                <th className="py-2.5 px-3">Model Action</th>
-                <th className="py-2.5 px-3">Win Prob</th>
+              <tr className="border-b border-terminal-800 bg-terminal-850 text-slate-400 text-[11px] uppercase tracking-wider select-none">
+                <th
+                  onClick={() => handleSort('strike')}
+                  className="py-2.5 px-3 cursor-pointer hover:text-white transition-colors"
+                  title="Click to sort by strike"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Strike & Type</span>
+                    <span className="text-[10px] text-slate-500">
+                      {sortBy === 'strike' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                    </span>
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('ltp')}
+                  className="py-2.5 px-3 cursor-pointer hover:text-white transition-colors"
+                  title="Click to sort by price"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>LTP (₹)</span>
+                    <span className="text-[10px] text-slate-500">
+                      {sortBy === 'ltp' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                    </span>
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('action')}
+                  className={`py-2.5 px-3 cursor-pointer transition-colors ${
+                    sortBy === 'action'
+                      ? 'bg-amber-500/15 text-amber-300 font-bold'
+                      : 'hover:text-white'
+                  }`}
+                  title="Click to sort by Model Action (Strong Buy first)"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>Model Action</span>
+                    <span className="text-xs text-amber-400 font-bold">
+                      {sortBy === 'action' ? (sortOrder === 'asc' ? '▼ (Strong Buy First)' : '▲') : '↕'}
+                    </span>
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort('winProb')}
+                  className="py-2.5 px-3 cursor-pointer hover:text-white transition-colors"
+                  title="Click to sort by win probability"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Win Prob</span>
+                    <span className="text-[10px] text-slate-500">
+                      {sortBy === 'winProb' ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                    </span>
+                  </div>
+                </th>
                 <th className="py-2.5 px-3">Target 1 & 2</th>
                 <th className="py-2.5 px-3">Stop Loss</th>
                 <th className="py-2.5 px-3">OI Build-up Phase</th>

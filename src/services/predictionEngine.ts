@@ -127,7 +127,7 @@ export class PredictionEngine {
       // Call Option Analysis
       if (isTrendBullish) {
         score += 20;
-        reasons.push('NIFTY Spot trading above VWAP & EMA 9 > 20');
+        reasons.push(`${underlying.symbol || 'Spot'} trading above VWAP & EMA 9 > 20`);
       } else if (isTrendBearish) {
         score -= 22;
       }
@@ -161,7 +161,7 @@ export class PredictionEngine {
       // Put Option Analysis
       if (isTrendBearish) {
         score += 20;
-        reasons.push('NIFTY Spot trading below VWAP & EMA 9 < 20');
+        reasons.push(`${underlying.symbol || 'Spot'} trading below VWAP & EMA 9 < 20`);
       } else if (isTrendBullish) {
         score -= 22;
       }
@@ -273,7 +273,7 @@ export class PredictionEngine {
     return {
       strike,
       optionType,
-      symbol: `NIFTY ${strike} ${optionType}`,
+      symbol: `${underlying.symbol || 'NIFTY'} ${strike} ${optionType}`,
       ltp,
       action,
       confidenceScore,

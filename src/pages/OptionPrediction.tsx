@@ -111,7 +111,20 @@ export const OptionPrediction: React.FC<OptionPredictionProps> = ({
         break;
     }
 
-    return list.sort((a, b) => b.confidenceScore - a.confidenceScore);
+    const ACTION_PRIORITY: Record<string, number> = {
+      'STRONG_BUY': 1,
+      'BUY': 2,
+      'SELL_WRITE': 3,
+      'NEUTRAL': 4,
+      'AVOID': 5,
+    };
+
+    return list.sort((a, b) => {
+      const pA = ACTION_PRIORITY[a.action] || 99;
+      const pB = ACTION_PRIORITY[b.action] || 99;
+      if (pA !== pB) return pA - pB;
+      return b.winProbability - a.winProbability;
+    });
   }, [predictions, selectedFilter, searchQuery, atmStrike]);
 
   const handleToggleAlert = (pred: StrikePrediction) => {
