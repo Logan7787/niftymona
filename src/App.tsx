@@ -141,6 +141,7 @@ function MainTerminal() {
             liveNiftyUnderlying={market.underlying}
             liveNiftyOptionChain={market.optionChain}
             liveNiftyIndicators={market.indicators}
+            multiIndexSnapshots={market.multiIndexSnapshots}
             onTradeClick={handleQuickTrade}
             onNavigateToChain={() => setActivePage('option-chain')}
           />

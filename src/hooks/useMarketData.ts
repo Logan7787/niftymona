@@ -23,6 +23,7 @@ export function useMarketData() {
   const [lastTickTime, setLastTickTime] = useState<string>(new Date().toISOString());
   const [strikeRange, setStrikeRange] = useState<number>(10);
   const [selectedExpiry, setSelectedExpiry] = useState<string>('');
+  const [multiIndexSnapshots, setMultiIndexSnapshots] = useState<Record<string, UnderlyingSnapshot>>(() => brokerService.getAllMultiIndexSnapshots());
 
   useEffect(() => {
     // Subscribe to live broker updates
@@ -36,6 +37,9 @@ export function useMarketData() {
       if (data.statusMessage) setStatusMessage(data.statusMessage);
       setLatencyMs(data.latencyMs);
       setLastTickTime(data.underlying.lastUpdate);
+      if (data.multiIndexSnapshots) {
+        setMultiIndexSnapshots(data.multiIndexSnapshots);
+      }
 
       if (!selectedExpiry && data.optionChain.selectedExpiry) {
         setSelectedExpiry(data.optionChain.selectedExpiry);
@@ -65,6 +69,7 @@ export function useMarketData() {
   const manualRefresh = useCallback(() => {
     setUnderlying(brokerService.getUnderlyingSnapshot());
     setOptionChain(brokerService.getOptionChainSnapshot(strikeRange));
+    setMultiIndexSnapshots(brokerService.getAllMultiIndexSnapshots());
   }, [strikeRange]);
 
   return {
@@ -79,6 +84,7 @@ export function useMarketData() {
     lastTickTime,
     strikeRange,
     selectedExpiry,
+    multiIndexSnapshots,
     changeExpiry,
     changeStrikeRange,
     selectBroker,

@@ -41,6 +41,7 @@ export type MarketDataListener = (data: {
   status: ConnectionStatus;
   statusMessage?: string;
   latencyMs: number;
+  multiIndexSnapshots?: Record<string, UnderlyingSnapshot>;
 }) => void;
 
 // Helper to sanitize direct or received Angel One JWT session tokens
@@ -143,6 +144,30 @@ function isNiftyIndex(q: any): boolean {
   return false;
 }
 
+// Identifies if a quote belongs to any major market index (NIFTY 50, BANK NIFTY, SENSEX, MIDCPNIFTY)
+function isAnyIndex(q: any): boolean {
+  if (!q) return false;
+  const token = String(q.symbolToken || q.token || '').trim();
+  const exchange = String(q.exchange || '').toUpperCase().trim();
+  const sym = String(q.tradingSymbol || q.tradingsymbol || q.symbol || '').toUpperCase().trim();
+
+  // Known Angel One Index Tokens (AMXIDX segment)
+  if (token === '99926000' || token === '99926009' || token === '99926074' || token === '99919000') {
+    return true;
+  }
+
+  // Options are always on NFO and end with CE or PE -> strictly NEVER an index
+  if (exchange === 'NFO' || sym.endsWith('CE') || sym.endsWith('PE')) {
+    return false;
+  }
+
+  if (sym.includes('NIFTY 50') || sym.includes('BANKNIFTY') || sym.includes('BANK NIFTY') || sym.includes('NIFTY BANK') || sym.includes('SENSEX') || sym.includes('MIDCPNIFTY') || sym.includes('MIDCAP SELECT')) {
+    return true;
+  }
+
+  return false;
+}
+
 class BrokerService {
   private activeProvider: BrokerProvider = 'mock';
   private connectionStatus: ConnectionStatus = 'connected';
@@ -169,6 +194,7 @@ class BrokerService {
   private signal: SignalOutput | null = null;
   private ticksMap: Map<string, NormalizedMarketTick> = new Map();
   private instrumentMetaMap: Map<string, ListedInstrument> = new Map();
+  private multiIndexSnapshots: Map<string, UnderlyingSnapshot> = new Map();
 
   // Polling & Subscriptions
   private pollingTimer: any = null;
@@ -178,8 +204,194 @@ class BrokerService {
   private subscribedTokens: Set<string> = new Set();
 
   constructor() {
+    this.initMultiIndexDefaults();
     this.initMockCandles();
     this.restoreSavedSession();
+  }
+
+  private initMultiIndexDefaults(): void {
+    const now = new Date().toISOString();
+    this.multiIndexSnapshots.set('NIFTY', {
+      symbol: 'NIFTY',
+      spotPrice: 25299.35,
+      change: 44.30,
+      changePercent: 0.18,
+      open: 25255.05,
+      high: 25320.40,
+      low: 25220.10,
+      dayHigh: 25320.40,
+      dayLow: 25220.10,
+      prevClose: 25255.05,
+      atmStrike: 25300,
+      nearestExpiry: '2026-11-19',
+      availableExpiries: ['2026-11-19', '2026-11-26', '2026-12-03', '2026-12-31'],
+      indiaVix: 13.82,
+      marketStatus: 'OPEN',
+      lastUpdate: now,
+      isSimulated: false,
+    });
+    this.multiIndexSnapshots.set('BANKNIFTY', {
+      symbol: 'BANKNIFTY',
+      spotPrice: 61518.50,
+      change: 726.10,
+      changePercent: 1.19,
+      open: 60800.00,
+      high: 61650.00,
+      low: 60750.00,
+      dayHigh: 61650.00,
+      dayLow: 60750.00,
+      prevClose: 60792.40,
+      atmStrike: 61500,
+      nearestExpiry: '2026-11-19',
+      availableExpiries: ['2026-11-19', '2026-11-26', '2026-12-03', '2026-12-31'],
+      indiaVix: 13.82,
+      marketStatus: 'OPEN',
+      lastUpdate: now,
+      isSimulated: false,
+    });
+    this.multiIndexSnapshots.set('SENSEX', {
+      symbol: 'SENSEX',
+      spotPrice: 81911.01,
+      change: 31.61,
+      changePercent: 0.04,
+      open: 81880.00,
+      high: 82050.00,
+      low: 81750.00,
+      dayHigh: 82050.00,
+      dayLow: 81750.00,
+      prevClose: 81879.40,
+      atmStrike: 81900,
+      nearestExpiry: '2026-11-20',
+      availableExpiries: ['2026-11-20', '2026-11-27', '2026-12-04', '2026-12-25'],
+      indiaVix: 13.82,
+      marketStatus: 'OPEN',
+      lastUpdate: now,
+      isSimulated: false,
+    });
+    this.multiIndexSnapshots.set('MIDCPNIFTY', {
+      symbol: 'MIDCPNIFTY',
+      spotPrice: 14251.85,
+      change: 58.30,
+      changePercent: 0.41,
+      open: 14200.00,
+      high: 14290.00,
+      low: 14180.00,
+      dayHigh: 14290.00,
+      dayLow: 14180.00,
+      prevClose: 14193.55,
+      atmStrike: 14250,
+      nearestExpiry: '2026-11-17',
+      availableExpiries: ['2026-11-17', '2026-11-24', '2026-12-01', '2026-12-29'],
+      indiaVix: 13.82,
+      marketStatus: 'OPEN',
+      lastUpdate: now,
+      isSimulated: false,
+    });
+  }
+
+  public getMultiIndexSnapshot(index: string): UnderlyingSnapshot | undefined {
+    return this.multiIndexSnapshots.get(index);
+  }
+
+  public getAllMultiIndexSnapshots(): Record<string, UnderlyingSnapshot> {
+    const obj: Record<string, UnderlyingSnapshot> = {};
+    for (const [k, v] of this.multiIndexSnapshots.entries()) {
+      obj[k] = v;
+    }
+    return obj;
+  }
+
+  public parseMultiIndexRecords(items: any[]): void {
+    if (!Array.isArray(items) || items.length === 0) return;
+    const now = new Date().toISOString();
+
+    for (const q of items) {
+      if (!q) continue;
+      const token = String(q.symbolToken || q.token || '').trim();
+      const sym = String(q.tradingSymbol || q.tradingsymbol || q.symbol || '').toUpperCase().trim();
+      const exch = String(q.exchange || '').toUpperCase().trim();
+
+      let indexKey: 'NIFTY' | 'BANKNIFTY' | 'SENSEX' | 'MIDCPNIFTY' | null = null;
+      let step = 50;
+
+      if (token === '99926000' || (exch === 'NSE' && (sym === 'NIFTY 50' || sym === 'NIFTY INDEX' || sym === 'NIFTY-I'))) {
+        indexKey = 'NIFTY';
+        step = 50;
+      } else if (token === '99926009' || sym.includes('BANKNIFTY') || sym.includes('NIFTY BANK') || sym.includes('BANK NIFTY')) {
+        indexKey = 'BANKNIFTY';
+        step = 100;
+      } else if (token === '99919000' || sym.includes('SENSEX') || (exch === 'BSE' && (sym.includes('BSX') || sym === 'SENSEX'))) {
+        indexKey = 'SENSEX';
+        step = 100;
+      } else if (token === '99926074' || sym.includes('MIDCPNIFTY') || sym.includes('MIDCAP SELECT') || sym.includes('NIFTY MIDCAP')) {
+        indexKey = 'MIDCPNIFTY';
+        step = 25;
+      }
+
+      if (!indexKey) continue;
+
+      const ltp = Number(q.ltp ?? q.lastPrice ?? q.close ?? 0);
+      if (ltp <= 0) continue;
+
+      const open = Number(q.open ?? ltp);
+      const high = Number(q.high ?? ltp);
+      const low = Number(q.low ?? ltp);
+      const close = Number(q.close ?? ltp);
+      const netChange = Number(q.netChange ?? (close > 0 ? ltp - close : 0));
+      const prevClose = close > 0 && Math.abs(ltp - close) > 0 ? close : (ltp - netChange);
+      const changePercent = Number(q.percentChange ?? (prevClose > 0 ? (netChange / prevClose) * 100 : 0));
+
+      const existing = this.multiIndexSnapshots.get(indexKey);
+      const atmStrike = Math.round(ltp / step) * step;
+
+      const snapshot: UnderlyingSnapshot = {
+        symbol: indexKey,
+        spotPrice: ltp,
+        change: Number(netChange.toFixed(2)),
+        changePercent: Number(changePercent.toFixed(2)),
+        open,
+        high,
+        low,
+        dayHigh: high,
+        dayLow: low,
+        prevClose,
+        atmStrike,
+        nearestExpiry: existing?.nearestExpiry || (indexKey === 'MIDCPNIFTY' ? '2026-11-17' : indexKey === 'SENSEX' ? '2026-11-20' : '2026-11-19'),
+        availableExpiries: existing?.availableExpiries || ['2026-11-19', '2026-11-26', '2026-12-03', '2026-12-31'],
+        indiaVix: existing?.indiaVix || 13.82,
+        marketStatus: 'OPEN',
+        lastUpdate: now,
+        isSimulated: false,
+      };
+
+      this.multiIndexSnapshots.set(indexKey, snapshot);
+
+      const idxTick: NormalizedMarketTick = {
+        provider: 'angelone',
+        exchange: exch === 'BSE' ? 'BSE' : 'NSE',
+        instrumentKey: token || indexKey,
+        tradingSymbol: sym || indexKey,
+        instrumentType: 'INDEX',
+        strike: 0,
+        expiry: '',
+        ltp,
+        open,
+        high,
+        low,
+        close,
+        prevClose,
+        priceChange: netChange,
+        changePercent,
+        volume: Number(q.totTrdQty || q.tradeVolume || 0),
+        oi: Number(q.opnInterest || 0),
+        exchangeTimestamp: now,
+        receivedTimestamp: now,
+        isStale: false,
+      };
+      this.ticksMap.set(indexKey, idxTick);
+      if (token) this.ticksMap.set(token, idxTick);
+      if (sym) this.ticksMap.set(sym, idxTick);
+    }
   }
 
   private initMockCandles(): void {
@@ -489,7 +701,8 @@ class BrokerService {
               payload: {
                 mode: 'FULL',
                 exchangeTokens: {
-                  NSE: ['99926000']
+                  NSE: ['99926000', '99926009', '99926074'],
+                  BSE: ['99919000']
                 }
               },
               clientPublicIp: '223.178.85.220',
@@ -507,9 +720,10 @@ class BrokerService {
             isAuthenticated = true;
             this.saveAngelOneCredentials(creds);
 
-            // Immediately parse live index quote from probe response to update spot price instantly
+            // Immediately parse all 4 live index quotes from probe response
             const probeItems = probeRes.data.data.fetched;
             if (Array.isArray(probeItems) && probeItems.length > 0) {
+              this.parseMultiIndexRecords(probeItems);
               const idxRec = probeItems.find(q => isNiftyIndex(q));
               if (idxRec) {
                 const ltp = Number(idxRec.ltp ?? idxRec.lastPrice ?? idxRec.close ?? 0);
@@ -759,7 +973,8 @@ class BrokerService {
       const payload: any = {
         mode: 'FULL',
         exchangeTokens: {
-          NSE: ['99926000'],
+          NSE: ['99926000', '99926009', '99926074'],
+          BSE: ['99919000'],
         }
       };
 
@@ -801,7 +1016,10 @@ class BrokerService {
       if (Array.isArray(items) && items.length > 0) {
         const now = new Date().toISOString();
 
-        // 1. Process NIFTY 50 Index record FIRST and EXCLUSIVELY
+        // 1. Process all 4 index records (NIFTY 50, BANK NIFTY, SENSEX, MIDCPNIFTY)
+        this.parseMultiIndexRecords(items);
+
+        // 2. Process NIFTY 50 Index record FIRST and EXCLUSIVELY for main engine
         const indexRecord = items.find(q => isNiftyIndex(q));
         if (indexRecord) {
           const ltp = Number(indexRecord.ltp ?? indexRecord.lastPrice ?? indexRecord.close ?? 0);
@@ -863,7 +1081,7 @@ class BrokerService {
 
         // 2. Process Option Contracts (strictly excluding index records)
         for (const q of items) {
-          if (!q || isNiftyIndex(q)) continue;
+          if (!q || isAnyIndex(q)) continue;
           const tokenStr = String(q.symbolToken || q.token || '');
           const symStr = String(q.tradingSymbol || q.tradingsymbol || '').toLowerCase();
           const meta = this.instrumentMetaMap.get(tokenStr) || angelScripService.getContractByToken(tokenStr);
@@ -1024,6 +1242,26 @@ class BrokerService {
           ltp: Number((peIntrinsic + timeVal + (Math.random() - 0.5) * 2).toFixed(2)),
           volume: Math.floor(45000 + Math.random() * 20000), oi: Math.floor(110000 + (s % 100 === 0 ? 60000 : 25000)),
           exchangeTimestamp: this.lastUpdate, receivedTimestamp: this.lastUpdate, isStale: false,
+        });
+      }
+
+      // Simulate realistic ticks for multi-index in mock mode
+      for (const [idx, snap] of this.multiIndexSnapshots.entries()) {
+        const idxStep = idx === 'MIDCPNIFTY' ? 25 : idx === 'NIFTY' ? 50 : 100;
+        const idxScale = snap.spotPrice / 25000;
+        const idxDrift = (Math.random() - 0.49) * (4.5 * idxScale);
+        const newSpot = Number((snap.spotPrice + idxDrift).toFixed(2));
+        const newChange = Number((newSpot - snap.prevClose).toFixed(2));
+        const newPct = Number(((newChange / snap.prevClose) * 100).toFixed(2));
+        this.multiIndexSnapshots.set(idx, {
+          ...snap,
+          spotPrice: newSpot,
+          dayHigh: Math.max(snap.dayHigh ?? newSpot, newSpot),
+          dayLow: Math.min(snap.dayLow ?? newSpot, newSpot),
+          change: newChange,
+          changePercent: newPct,
+          atmStrike: Math.round(newSpot / idxStep) * idxStep,
+          lastUpdate: this.lastUpdate,
         });
       }
 
@@ -1377,6 +1615,7 @@ class BrokerService {
       status: this.connectionStatus,
       statusMessage: this.statusMessage,
       latencyMs: 14,
+      multiIndexSnapshots: this.getAllMultiIndexSnapshots(),
     });
     return () => {
       this.listeners.delete(listener);
@@ -1393,6 +1632,7 @@ class BrokerService {
       status: this.connectionStatus,
       statusMessage: this.statusMessage,
       latencyMs,
+      multiIndexSnapshots: this.getAllMultiIndexSnapshots(),
     };
     for (const l of this.listeners) l(payload);
   }

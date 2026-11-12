@@ -39,6 +39,7 @@ interface MultiIndexPredictionProps {
   liveNiftyUnderlying: UnderlyingSnapshot | null;
   liveNiftyOptionChain: OptionChainSnapshot | null;
   liveNiftyIndicators: TechnicalIndicatorData | null;
+  multiIndexSnapshots?: Record<string, UnderlyingSnapshot>;
   onTradeClick?: (symbol: string, strike: number, type: 'CE' | 'PE', price: number) => void;
   onNavigateToChain?: () => void;
 }
@@ -46,6 +47,7 @@ interface MultiIndexPredictionProps {
 export const MultiIndexPrediction: React.FC<MultiIndexPredictionProps> = ({
   liveNiftyUnderlying,
   liveNiftyOptionChain,
+  multiIndexSnapshots,
   onTradeClick,
   onNavigateToChain,
 }) => {
@@ -58,14 +60,15 @@ export const MultiIndexPrediction: React.FC<MultiIndexPredictionProps> = ({
 
   // Compute underlying, option chain, and predictions for the selected index
   const { underlying, predictions, summary } = useMemo(() => {
-    const under = MultiIndexService.getUnderlying(selectedIndex, liveNiftyUnderlying);
+    const under = MultiIndexService.getUnderlying(selectedIndex, liveNiftyUnderlying, multiIndexSnapshots);
     const { predictions: preds, summary: summ } = MultiIndexService.getPredictions(
       selectedIndex,
       liveNiftyUnderlying,
-      liveNiftyOptionChain
+      liveNiftyOptionChain,
+      multiIndexSnapshots
     );
     return { underlying: under, predictions: preds, summary: summ };
-  }, [selectedIndex, liveNiftyUnderlying, liveNiftyOptionChain]);
+  }, [selectedIndex, liveNiftyUnderlying, liveNiftyOptionChain, multiIndexSnapshots]);
 
   const atmStrike = underlying.atmStrike;
   const config = INDEX_CONFIGS[selectedIndex];
@@ -182,7 +185,7 @@ export const MultiIndexPrediction: React.FC<MultiIndexPredictionProps> = ({
           {(['NIFTY', 'BANKNIFTY', 'SENSEX', 'MIDCPNIFTY'] as SupportedIndex[]).map((idx) => {
             const cfg = INDEX_CONFIGS[idx];
             const isSelected = selectedIndex === idx;
-            const spotData = MultiIndexService.getUnderlying(idx, liveNiftyUnderlying);
+            const spotData = MultiIndexService.getUnderlying(idx, liveNiftyUnderlying, multiIndexSnapshots);
             const isPos = spotData.change >= 0;
 
             return (

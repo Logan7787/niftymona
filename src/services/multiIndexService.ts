@@ -37,7 +37,7 @@ export const INDEX_CONFIGS: Record<SupportedIndex, IndexConfig> = {
     symbol: 'NIFTY',
     strikeStep: 50,
     lotSize: 65,
-    defaultSpot: 23440.80,
+    defaultSpot: 25299.35,
     strikesCount: 16,
     description: 'National Stock Exchange Benchmark 50 Large-Cap Index',
     nearestExpiry: '2026-11-19',
@@ -50,7 +50,7 @@ export const INDEX_CONFIGS: Record<SupportedIndex, IndexConfig> = {
     symbol: 'BANKNIFTY',
     strikeStep: 100,
     lotSize: 15,
-    defaultSpot: 50485.40,
+    defaultSpot: 61518.50,
     strikesCount: 16,
     description: 'NSE Banking Sector Index (12 Liquid Banking Equities)',
     nearestExpiry: '2026-11-19',
@@ -63,7 +63,7 @@ export const INDEX_CONFIGS: Record<SupportedIndex, IndexConfig> = {
     symbol: 'SENSEX',
     strikeStep: 100,
     lotSize: 10,
-    defaultSpot: 78245.20,
+    defaultSpot: 81911.01,
     strikesCount: 16,
     description: 'Bombay Stock Exchange Benchmark 30 Blue-Chip Index',
     nearestExpiry: '2026-11-20',
@@ -76,7 +76,7 @@ export const INDEX_CONFIGS: Record<SupportedIndex, IndexConfig> = {
     symbol: 'MIDCPNIFTY',
     strikeStep: 25,
     lotSize: 75,
-    defaultSpot: 12385.60,
+    defaultSpot: 14251.85,
     strikesCount: 16,
     description: 'NSE Midcap Select Index (Top 25 Liquid Mid-Cap Stocks)',
     nearestExpiry: '2026-11-17',
@@ -90,15 +90,23 @@ export class MultiIndexService {
    */
   public static getUnderlying(
     indexId: SupportedIndex,
-    liveNiftyUnderlying?: UnderlyingSnapshot | null
+    liveNiftyUnderlying?: UnderlyingSnapshot | null,
+    multiIndexSnapshots?: Record<string, UnderlyingSnapshot> | null
   ): UnderlyingSnapshot {
     const config = INDEX_CONFIGS[indexId];
     const now = new Date().toISOString();
 
+    // 1. Highest Priority: Live streaming snapshot from broker quote for this specific index
+    if (multiIndexSnapshots && multiIndexSnapshots[indexId] && multiIndexSnapshots[indexId].spotPrice > 0) {
+      return multiIndexSnapshots[indexId];
+    }
+
+    // 2. Fallback for NIFTY if liveNiftyUnderlying was passed directly
     if (indexId === 'NIFTY' && liveNiftyUnderlying && liveNiftyUnderlying.spotPrice > 10000) {
       return liveNiftyUnderlying;
     }
 
+    // 3. Fallback to calibrated benchmark reference snapshot
     const spot = config.defaultSpot;
     const atm = Math.round(spot / config.strikeStep) * config.strikeStep;
     const change = +(spot * 0.0042).toFixed(2);
@@ -121,7 +129,7 @@ export class MultiIndexService {
       indiaVix: 13.82,
       marketStatus: 'OPEN',
       lastUpdate: now,
-      isSimulated: indexId !== 'NIFTY' || !liveNiftyUnderlying,
+      isSimulated: true,
     };
   }
 
@@ -322,9 +330,10 @@ export class MultiIndexService {
   public static getPredictions(
     indexId: SupportedIndex,
     liveNiftyUnderlying?: UnderlyingSnapshot | null,
-    liveNiftyChain?: OptionChainSnapshot | null
+    liveNiftyChain?: OptionChainSnapshot | null,
+    multiIndexSnapshots?: Record<string, UnderlyingSnapshot> | null
   ): { predictions: StrikePrediction[]; summary: MarketPredictionSummary | null } {
-    const underlying = this.getUnderlying(indexId, liveNiftyUnderlying);
+    const underlying = this.getUnderlying(indexId, liveNiftyUnderlying, multiIndexSnapshots);
     const indicators = this.getIndicators(indexId);
     const optionChain = this.getOptionChain(indexId, underlying, liveNiftyChain);
 

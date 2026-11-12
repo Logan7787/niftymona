@@ -10,7 +10,7 @@ export type Moneyness = 'ITM' | 'ATM' | 'OTM';
 
 export interface NormalizedMarketTick {
   provider: BrokerProvider;
-  exchange: 'NSE' | 'NFO';
+  exchange: 'NSE' | 'NFO' | 'BSE' | 'BFO';
   instrumentKey: string;
   tradingSymbol: string;
   instrumentType: 'INDEX' | 'CE' | 'PE';
