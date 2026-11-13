@@ -967,8 +967,20 @@ class BrokerService {
       const authHeader = `Bearer ${jwt}`;
       const quoteUrl = '/api/angelone/rest/secure/angelbroking/market/v1/quote';
 
-      const exp = this.selectedExpiry || angelScripService.getNearestExpiry();
-      const nfoTokens = angelScripService.getAtmTokens(this.spotPrice || 23450, exp, 8);
+      const exp = this.selectedExpiry || angelScripService.getNearestExpiry('NIFTY');
+
+      // Collect ATM option tokens for all 4 indices to stream live quotes simultaneously
+      const bnfAtm = this.multiIndexSnapshots.get('BANKNIFTY')?.atmStrike || 61500;
+      const snxAtm = this.multiIndexSnapshots.get('SENSEX')?.atmStrike || 81900;
+      const midAtm = this.multiIndexSnapshots.get('MIDCPNIFTY')?.atmStrike || 14250;
+      const nfyAtm = this.spotPrice || 25300;
+
+      const niftyTokens = angelScripService.getAtmTokensForIndex('NIFTY', nfyAtm, undefined, 2).tokens;
+      const bnfTokens = angelScripService.getAtmTokensForIndex('BANKNIFTY', bnfAtm, undefined, 2).tokens;
+      const midTokens = angelScripService.getAtmTokensForIndex('MIDCPNIFTY', midAtm, undefined, 2).tokens;
+      const snxTokens = angelScripService.getAtmTokensForIndex('SENSEX', snxAtm, undefined, 2).tokens;
+
+      const nfoTokens = [...niftyTokens, ...bnfTokens, ...midTokens];
 
       const payload: any = {
         mode: 'FULL',
@@ -979,7 +991,10 @@ class BrokerService {
       };
 
       if (nfoTokens.length > 0) {
-        payload.exchangeTokens.NFO = nfoTokens.slice(0, 24);
+        payload.exchangeTokens.NFO = nfoTokens;
+      }
+      if (snxTokens.length > 0) {
+        payload.exchangeTokens.BFO = snxTokens;
       }
 
       const res = await axios.post(
@@ -1102,7 +1117,7 @@ class BrokerService {
 
           const tick: NormalizedMarketTick = {
             provider: 'angelone',
-            exchange: 'NFO',
+            exchange: (meta?.exchange as any) || (String(q.exchange).toUpperCase() === 'BFO' ? 'BFO' : 'NFO'),
             instrumentKey: tokenStr,
             tradingSymbol: q.tradingSymbol || meta?.symbol || tokenStr,
             instrumentType: (meta?.instrumentType as any) || (symStr.endsWith('ce') ? 'CE' : 'PE'),
@@ -1132,6 +1147,10 @@ class BrokerService {
           }
           if (q.tradingSymbol) {
             this.ticksMap.set(q.tradingSymbol, tick);
+          }
+          const angelMeta = angelScripService.getContractByToken(tokenStr);
+          if (angelMeta?.index && angelMeta.strike && angelMeta.type) {
+            this.ticksMap.set(`${angelMeta.index}_${angelMeta.strike}_${angelMeta.type}`, tick);
           }
         }
 
@@ -1525,6 +1544,19 @@ class BrokerService {
     const angelContract = angelScripService.getContract(strike, type, exp);
     if (angelContract && this.ticksMap.has(angelContract.token)) {
       return this.ticksMap.get(angelContract.token);
+    }
+    return undefined;
+  }
+
+  public getContractTick(indexId: string, strike: number, type: 'CE' | 'PE', expiry?: string): NormalizedMarketTick | undefined {
+    const directKey = `${indexId}_${strike}_${type}`;
+    if (this.ticksMap.has(directKey)) {
+      return this.ticksMap.get(directKey);
+    }
+    const angelContract = angelScripService.getContract(strike, type, expiry, indexId);
+    if (angelContract) {
+      if (this.ticksMap.has(angelContract.token)) return this.ticksMap.get(angelContract.token);
+      if (this.ticksMap.has(angelContract.symbol)) return this.ticksMap.get(angelContract.symbol);
     }
     return undefined;
   }

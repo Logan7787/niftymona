@@ -17,7 +17,7 @@ export interface ListedInstrument {
   strike: number;
   lotSize: number;
   instrumentType: 'INDEX' | 'CE' | 'PE';
-  exchange: 'NSE' | 'NFO';
+  exchange: 'NSE' | 'NFO' | 'BSE' | 'BFO';
   tickSize: number;
 }
 

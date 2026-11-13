@@ -1,16 +1,22 @@
 // ==============================================================================
-// Angel One Scrip Service: Resolves real NFO option tokens & trading symbols
-// Pre-indexed for sub-millisecond lookups across all active expiries
+// Angel One Scrip Service: Resolves real NFO & BFO option tokens & trading symbols
+// Pre-indexed for sub-millisecond lookups across all active expiries for:
+// - NIFTY 50
+// - BANK NIFTY
+// - BSE SENSEX
+// - NIFTY MIDCAP SELECT (MIDCPNIFTY)
 // ==============================================================================
 
-import rawContracts from '../data/angelNfoContracts.json';
+import rawContracts from '../data/angelMultiIndexContracts.json';
 import { ListedInstrument } from './marketEngine';
 
 export interface AngelContract {
   token: string;
   symbol: string;
-  expiry: string; // e.g. "03NOV2026"
-  isoExpiry: string; // e.g. "2026-11-03"
+  index: string; // 'NIFTY' | 'BANKNIFTY' | 'SENSEX' | 'MIDCPNIFTY'
+  exchange: 'NFO' | 'BFO';
+  expiry: string; // e.g. "23NOV2026"
+  isoExpiry: string; // e.g. "2026-11-23"
   strike: number;
   type: 'CE' | 'PE';
   instrumentType: 'CE' | 'PE';
@@ -51,9 +57,9 @@ class AngelScripService {
   private contracts: AngelContract[] = [];
   private tokenMap: Map<string, AngelContract> = new Map();
   private symbolMap: Map<string, AngelContract> = new Map();
-  // Key format: `${strike}_${type}_${isoExpiry}`
+  // Key format: `${index}_${strike}_${type}_${isoExpiry}` and `${strike}_${type}_${isoExpiry}`
   private strikeMap: Map<string, AngelContract> = new Map();
-  private expiries: string[] = [];
+  private expiriesByIndex: Map<string, string[]> = new Map();
 
   constructor() {
     this.init();
@@ -61,13 +67,15 @@ class AngelScripService {
 
   private init(): void {
     const rawList = Array.isArray(rawContracts) ? rawContracts : [];
-    const expirySet = new Set<string>();
+    const expirySetByIndex = new Map<string, Set<string>>();
 
     for (const c of rawList) {
       const isoExp = angelToIsoExpiry(c.expiry);
       const contract: AngelContract = {
         token: String(c.token),
         symbol: String(c.symbol),
+        index: (c as any).index || 'NIFTY',
+        exchange: ((c as any).exchange === 'BFO' ? 'BFO' : 'NFO'),
         expiry: String(c.expiry),
         isoExpiry: isoExp,
         strike: Number(c.strike),
@@ -80,42 +88,66 @@ class AngelScripService {
       this.contracts.push(contract);
       this.tokenMap.set(contract.token, contract);
       this.symbolMap.set(contract.symbol, contract);
-      this.strikeMap.set(`${contract.strike}_${contract.type}_${contract.isoExpiry}`, contract);
-      this.strikeMap.set(`${contract.strike}_${contract.type}_${contract.expiry}`, contract);
+
+      const idxKey = contract.index;
+      // Index-prefixed keys
+      this.strikeMap.set(`${idxKey}_${contract.strike}_${contract.type}_${contract.isoExpiry}`, contract);
+      this.strikeMap.set(`${idxKey}_${contract.strike}_${contract.type}_${contract.expiry}`, contract);
+      this.strikeMap.set(`${idxKey}_${contract.strike}_${contract.type}`, contract);
+
+      // Default fallback keys (for NIFTY backward compatibility)
+      if (idxKey === 'NIFTY') {
+        this.strikeMap.set(`${contract.strike}_${contract.type}_${contract.isoExpiry}`, contract);
+        this.strikeMap.set(`${contract.strike}_${contract.type}_${contract.expiry}`, contract);
+      }
 
       if (isoExp) {
-        expirySet.add(isoExp);
+        if (!expirySetByIndex.has(idxKey)) {
+          expirySetByIndex.set(idxKey, new Set<string>());
+        }
+        expirySetByIndex.get(idxKey)!.add(isoExp);
       }
     }
 
-    this.expiries = Array.from(expirySet).sort();
+    for (const [idx, set] of expirySetByIndex.entries()) {
+      this.expiriesByIndex.set(idx, Array.from(set).sort());
+    }
   }
 
-  public getAvailableExpiries(): string[] {
-    return this.expiries;
+  public getAvailableExpiries(index = 'NIFTY'): string[] {
+    return this.expiriesByIndex.get(index) || this.expiriesByIndex.get('NIFTY') || [];
   }
 
-  public getNearestExpiry(): string {
+  public getNearestExpiry(index = 'NIFTY'): string {
+    const list = this.getAvailableExpiries(index);
     const today = new Date().toISOString().split('T')[0];
-    const upcoming = this.expiries.find(e => e >= today);
-    return upcoming || this.expiries[0] || '2026-11-03';
+    const upcoming = list.find(e => e >= today);
+    return upcoming || list[0] || (index === 'SENSEX' ? '2026-11-19' : '2026-11-23');
   }
 
-  public getStrikesForExpiry(isoExpiry: string): number[] {
+  public getStrikesForExpiry(isoExpiry: string, index = 'NIFTY'): number[] {
     const exp = isoExpiry.includes('-') ? isoExpiry : angelToIsoExpiry(isoExpiry);
     const strikes = new Set<number>();
     for (const c of this.contracts) {
-      if (c.isoExpiry === exp || c.expiry === isoExpiry) {
+      if (c.index === index && (c.isoExpiry === exp || c.expiry === isoExpiry)) {
         strikes.add(c.strike);
       }
     }
     return Array.from(strikes).sort((a, b) => a - b);
   }
 
-  public getContract(strike: number, type: 'CE' | 'PE', isoExpiry?: string): AngelContract | undefined {
-    const exp = isoExpiry || this.getNearestExpiry();
+  public getContract(strike: number, type: 'CE' | 'PE', isoExpiry?: string, index?: string): AngelContract | undefined {
+    const idx = index || 'NIFTY';
+    const exp = isoExpiry || this.getNearestExpiry(idx);
     const isoExp = exp.includes('-') ? exp : angelToIsoExpiry(exp);
-    return this.strikeMap.get(`${strike}_${type}_${isoExp}`) || this.strikeMap.get(`${strike}_${type}_${exp}`);
+
+    return (
+      this.strikeMap.get(`${idx}_${strike}_${type}_${isoExp}`) ||
+      this.strikeMap.get(`${idx}_${strike}_${type}_${exp}`) ||
+      this.strikeMap.get(`${idx}_${strike}_${type}`) ||
+      this.strikeMap.get(`${strike}_${type}_${isoExp}`) ||
+      this.strikeMap.get(`${strike}_${type}_${exp}`)
+    );
   }
 
   public getContractByToken(token: string): AngelContract | undefined {
@@ -126,12 +158,20 @@ class AngelScripService {
     return this.symbolMap.get(symbol);
   }
 
-  public getAtmTokens(atm: number, isoExpiry?: string, windowCount = 10): string[] {
-    const exp = isoExpiry || this.getNearestExpiry();
-    const strikes = this.getStrikesForExpiry(exp);
-    if (strikes.length === 0) return [];
+  /**
+   * Retrieves ATM window contract tokens for a specific index
+   */
+  public getAtmTokensForIndex(
+    index: 'NIFTY' | 'BANKNIFTY' | 'SENSEX' | 'MIDCPNIFTY',
+    atm: number,
+    isoExpiry?: string,
+    windowCount = 3
+  ): { exchange: 'NFO' | 'BFO'; tokens: string[] } {
+    const exp = isoExpiry || this.getNearestExpiry(index);
+    const exch: 'NFO' | 'BFO' = index === 'SENSEX' ? 'BFO' : 'NFO';
+    const strikes = this.getStrikesForExpiry(exp, index);
+    if (strikes.length === 0) return { exchange: exch, tokens: [] };
 
-    // Find closest strike
     let closestStrike = strikes[0];
     let minDiff = Infinity;
     for (const s of strikes) {
@@ -149,43 +189,55 @@ class AngelScripService {
 
     const tokens: string[] = [];
     for (const s of selected) {
-      const ce = this.getContract(s, 'CE', exp);
-      const pe = this.getContract(s, 'PE', exp);
+      const ce = this.getContract(s, 'CE', exp, index);
+      const pe = this.getContract(s, 'PE', exp, index);
       if (ce?.token) tokens.push(ce.token);
       if (pe?.token) tokens.push(pe.token);
     }
-    return tokens;
+
+    return { exchange: exch, tokens };
   }
 
-  public getListedInstruments(isoExpiry?: string): ListedInstrument[] {
-    const exp = isoExpiry || this.getNearestExpiry();
+  public getAtmTokens(atm: number, isoExpiry?: string, windowCount = 10): string[] {
+    return this.getAtmTokensForIndex('NIFTY', atm, isoExpiry, windowCount).tokens;
+  }
+
+  public getListedInstruments(isoExpiry?: string, index = 'NIFTY'): ListedInstrument[] {
+    const exp = isoExpiry || this.getNearestExpiry(index);
     const isoExp = exp.includes('-') ? exp : angelToIsoExpiry(exp);
+
+    const indexToken =
+      index === 'BANKNIFTY' ? '99926009' :
+      index === 'SENSEX' ? '99919000' :
+      index === 'MIDCPNIFTY' ? '99926074' : '99926000';
+
+    const indexExchange = index === 'SENSEX' ? 'BSE' : 'NSE';
 
     const result: ListedInstrument[] = [
       {
-        token: '99926000',
-        symbol: 'NIFTY 50',
-        name: 'NIFTY',
+        token: indexToken,
+        symbol: index,
+        name: index,
         expiry: '',
         strike: 0,
-        lotSize: 65,
+        lotSize: index === 'BANKNIFTY' ? 15 : index === 'SENSEX' ? 10 : index === 'MIDCPNIFTY' ? 75 : 65,
         instrumentType: 'INDEX',
-        exchange: 'NSE',
+        exchange: indexExchange,
         tickSize: 0.05,
       }
     ];
 
     for (const c of this.contracts) {
-      if (c.isoExpiry === isoExp || c.expiry === exp) {
+      if (c.index === index && (c.isoExpiry === isoExp || c.expiry === exp)) {
         result.push({
           token: c.token,
           symbol: c.symbol,
-          name: 'NIFTY',
+          name: index,
           expiry: c.isoExpiry,
           strike: c.strike,
           lotSize: c.lotSize,
           instrumentType: c.type,
-          exchange: 'NFO',
+          exchange: c.exchange,
           tickSize: c.tickSize,
         });
       }
