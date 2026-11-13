@@ -156,12 +156,17 @@ function isAnyIndex(q: any): boolean {
     return true;
   }
 
-  // Options are always on NFO and end with CE or PE -> strictly NEVER an index
-  if (exchange === 'NFO' || sym.endsWith('CE') || sym.endsWith('PE')) {
+  // Options and derivatives are on NFO / BFO or end with CE/PE or contain strike numbers -> strictly NEVER an index
+  if (exchange === 'NFO' || exchange === 'BFO' || sym.endsWith('CE') || sym.endsWith('PE') || /\d{4,}/.test(sym)) {
     return false;
   }
 
-  if (sym.includes('NIFTY 50') || sym.includes('BANKNIFTY') || sym.includes('BANK NIFTY') || sym.includes('NIFTY BANK') || sym.includes('SENSEX') || sym.includes('MIDCPNIFTY') || sym.includes('MIDCAP SELECT')) {
+  if (
+    sym === 'NIFTY 50' || sym === 'NIFTY INDEX' || sym === 'NIFTY-I' ||
+    sym === 'NIFTY BANK' || sym === 'BANK NIFTY' || sym === 'BANKNIFTY' || sym === 'BANKNIFTY-I' ||
+    sym === 'SENSEX' || sym === 'BSX' || sym === 'BSE SENSEX' ||
+    sym === 'MIDCPNIFTY' || sym === 'NIFTY MID SELECT' || sym === 'MIDCAP SELECT' || sym === 'MIDCPNIFTY-I'
+  ) {
     return true;
   }
 
@@ -311,27 +316,39 @@ class BrokerService {
       const sym = String(q.tradingSymbol || q.tradingsymbol || q.symbol || '').toUpperCase().trim();
       const exch = String(q.exchange || '').toUpperCase().trim();
 
+      // STRICT DERIVATIVE/OPTION FILTER:
+      // Option contracts have strike prices, end with CE/PE, or belong to NFO/BFO.
+      // They must NEVER overwrite an index spot record!
+      if (exch === 'NFO' || exch === 'BFO' || sym.endsWith('CE') || sym.endsWith('PE') || /\d{4,}/.test(sym)) {
+        continue;
+      }
+
       let indexKey: 'NIFTY' | 'BANKNIFTY' | 'SENSEX' | 'MIDCPNIFTY' | null = null;
       let step = 50;
+      let minThreshold = 10000;
 
-      if (token === '99926000' || (exch === 'NSE' && (sym === 'NIFTY 50' || sym === 'NIFTY INDEX' || sym === 'NIFTY-I'))) {
+      if (token === '99926000' || (exch === 'NSE' && (sym === 'NIFTY 50' || sym === 'NIFTY INDEX' || sym === 'NIFTY-I' || sym === 'NIFTY'))) {
         indexKey = 'NIFTY';
         step = 50;
-      } else if (token === '99926009' || sym.includes('BANKNIFTY') || sym.includes('NIFTY BANK') || sym.includes('BANK NIFTY')) {
+        minThreshold = 10000;
+      } else if (token === '99926009' || (exch === 'NSE' && (sym === 'NIFTY BANK' || sym === 'BANK NIFTY' || sym === 'BANKNIFTY' || sym === 'BANKNIFTY-I'))) {
         indexKey = 'BANKNIFTY';
         step = 100;
-      } else if (token === '99919000' || sym.includes('SENSEX') || (exch === 'BSE' && (sym.includes('BSX') || sym === 'SENSEX'))) {
+        minThreshold = 25000;
+      } else if (token === '99919000' || (exch === 'BSE' && (sym === 'SENSEX' || sym === 'BSX' || sym === 'BSE SENSEX'))) {
         indexKey = 'SENSEX';
         step = 100;
-      } else if (token === '99926074' || sym.includes('MIDCPNIFTY') || sym.includes('MIDCAP SELECT') || sym.includes('NIFTY MIDCAP')) {
+        minThreshold = 35000;
+      } else if (token === '99926074' || (exch === 'NSE' && (sym === 'NIFTY MID SELECT' || sym === 'MIDCAP SELECT' || sym === 'MIDCPNIFTY' || sym === 'MIDCPNIFTY-I'))) {
         indexKey = 'MIDCPNIFTY';
         step = 25;
+        minThreshold = 5000;
       }
 
       if (!indexKey) continue;
 
       const ltp = Number(q.ltp ?? q.lastPrice ?? q.close ?? 0);
-      if (ltp <= 0) continue;
+      if (ltp < minThreshold) continue;
 
       const open = Number(q.open ?? ltp);
       const high = Number(q.high ?? ltp);

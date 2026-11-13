@@ -98,7 +98,9 @@ export class MultiIndexService {
     const now = new Date().toISOString();
 
     // 1. Highest Priority: Live streaming snapshot from broker quote for this specific index
-    if (multiIndexSnapshots && multiIndexSnapshots[indexId] && multiIndexSnapshots[indexId].spotPrice > 0) {
+    // Validated against minimum plausible spot index threshold to guard against option premium pollution
+    const minThreshold = indexId === 'NIFTY' ? 10000 : indexId === 'BANKNIFTY' ? 25000 : indexId === 'SENSEX' ? 35000 : 5000;
+    if (multiIndexSnapshots && multiIndexSnapshots[indexId] && multiIndexSnapshots[indexId].spotPrice > minThreshold) {
       return multiIndexSnapshots[indexId];
     }
 
